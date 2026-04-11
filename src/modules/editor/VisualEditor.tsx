@@ -1,4 +1,7 @@
 import * as React from 'react'
+import { useEffect } from 'react'
+
+import { useSetToolMode } from '~/atoms/editor'
 
 import { Canvas } from './components/Canvas'
 import { ComponentPanel } from './components/ComponentPanel'
@@ -6,18 +9,46 @@ import { DeviceToolbar } from './components/DeviceToolbar'
 import { PropsPanel } from './components/PropsPanel'
 
 export const VisualEditor: React.FC = () => {
-  return (
-    <div className="flex h-screen bg-bg">
-      {/* 左侧组件面板 */}
-      <ComponentPanel />
+  const setToolMode = useSetToolMode()
 
-      {/* 中间画布区 */}
-      <div className="flex-1 relative">
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 忽略输入法、ALT/CTRL/META 等组合键
+      if (e.altKey || e.ctrlKey || e.metaKey) return
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return
+
+      switch (e.key.toLowerCase()) {
+        case 'v': {
+          setToolMode('select')
+          break
+        }
+        case 'h': {
+          setToolMode('pan')
+          break
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setToolMode])
+
+  return (
+    <div className="relative w-full h-screen bg-bg overflow-hidden">
+      {/* 画布占满整个屏幕，放在最底层 */}
+      <div className="absolute inset-0">
         <DeviceToolbar />
         <Canvas />
       </div>
 
-      {/* 右侧属性面板 */}
+      {/* 左侧组件面板 - 浮动在画布上方 */}
+      <ComponentPanel />
+
+      {/* 右侧属性面板 - 浮动在画布上方 */}
       <PropsPanel />
     </div>
   )

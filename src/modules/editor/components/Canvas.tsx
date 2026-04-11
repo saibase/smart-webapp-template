@@ -1,38 +1,77 @@
+import type { PanInfo } from 'motion/react'
 import { m } from 'motion/react'
 import { nanoid } from 'nanoid'
 import * as React from 'react'
-import { useRef } from 'react'
+import { useCallback, useRef } from 'react'
 
 import type { CanvasElement } from '~/atoms/editor'
 import {
   addCanvasElement,
+  addCanvasOffset,
+  clearDragPreview,
+  getCanvasElements,
   updateElementPosition,
   useCanvasElementsValue,
+  useCanvasOffsetValue,
+  useDragPreviewValue,
   useEditorConfigValue,
-  useSelectedElementIdValue,
-  useSetSelectedElementId,
+  useSelectedElementIdsValue,
+  useSelectionBoxValue,
+  useSetCanvasElements,
+  useSetDragPreview,
+  useSetSelectedElementIds,
+  useSetSelectionBox,
+  useToolModeValue,
 } from '~/atoms/editor'
 import { cn } from '~/lib/cn'
 import { Spring } from '~/lib/spring'
 
-import { getComponentById } from '../../editor/registry'
+import { getComponentById } from '../registry'
 
 type CanvasProps = {
   className?: string
 }
 
-const deviceSizes = {
-  mobile: 'w-[375px] h-[667px]',
-  tablet: 'w-[768px] h-[1024px]',
-  desktop: 'w-[1440px] h-[1024px]',
-}
-
 export const Canvas: React.FC<CanvasProps> = ({ className }) => {
   const elements = useCanvasElementsValue()
-  const selectedId = useSelectedElementIdValue()
-  const setSelectedId = useSetSelectedElementId()
-  const { scale, device } = useEditorConfigValue()
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const selectedIds = useSelectedElementIdsValue()
+  const setSelectedIds = useSetSelectedElementIds()
+  const { scale } = useEditorConfigValue()
+  const dragPreview = useDragPreviewValue()
+  const setDragPreview = useSetDragPreview()
+  const canvasOffset = useCanvasOffsetValue()
+  const toolMode = useToolModeValue()
+  const selectionBox = useSelectionBoxValue()
+  const setSelectionBox = useSetSelectionBox()
+  const setCanvasElements = useSetCanvasElements()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isBoxSelectingRef = useRef(false)
+  // 多选批量拖拽时的实时偏移
+  const [multiDragOffset, setMultiDragOffset] = React.useState({ x: 0, y: 0 })
+
+  // 处理画布整体平移 - 长按背景拖拽
+  const handleCanvasPan = (_: unknown, info: PanInfo) => {
+    addCanvasOffset(info.delta.x, info.delta.y)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+
+    const componentId = e.dataTransfer.getData('componentId')
+    if (!componentId || !containerRef.current) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const scaleFactor = scale / 100
+    // Get mouse position relative to canvas container, subtract canvas offset
+    const mouseX = e.clientX - rect.left - canvasOffset.x
+    const mouseY = e.clientY - rect.top - canvasOffset.y
+    // Convert to canvas's coordinate system (before scaling)
+    const x = Math.round(mouseX / scaleFactor)
+    const y = Math.round(mouseY / scaleFactor)
+
+    setDragPreview({ componentId, x, y })
+  }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -42,11 +81,14 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     const component = getComponentById(componentId)
     if (!component) return
 
-    // Calculate position relative to canvas
-    if (canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect()
-      const x = Math.round((e.clientX - rect.left) / (scale / 100))
-      const y = Math.round((e.clientY - rect.top) / (scale / 100))
+    // Calculate position relative to canvas considering scale transformation and offset
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleFactor = scale / 100
+      const mouseX = e.clientX - rect.left - canvasOffset.x
+      const mouseY = e.clientY - rect.top - canvasOffset.y
+      const x = Math.round(mouseX / scaleFactor)
+      const y = Math.round(mouseY / scaleFactor)
 
       const newElement: CanvasElement = {
         id: nanoid(),
@@ -57,29 +99,207 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
       }
 
       addCanvasElement(newElement)
+      clearDragPreview()
     }
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
+  const handleDragLeave = () => {
+    clearDragPreview()
   }
 
-  const handleCanvasClick = () => {
-    setSelectedId(null)
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    // 点击画布背景区域（不是元素，不是多选包围框）时，清除所有选择
+    if (selectedIds.length > 0 && !selectionBox) {
+      // 检查点击目标是否是画布容器或背景网格，确实在框外
+      const target = e.target as HTMLElement
+      const isBackground =
+        target.classList.contains('bg-bg') ||
+        (target.classList.contains('absolute') &&
+          target.style.backgroundImage?.includes('radial-gradient'))
+      if (isBackground || e.target === e.currentTarget) {
+        setSelectedIds([])
+      }
+    }
   }
 
+  // 处理多选包围框上的鼠标按下 - 已经在m.div上阻止了事件冒泡，这里不需要额外处理
+
+  // 开始框选 - 鼠标按下在画布背景
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // 只响应鼠标左键 (button === 0)
+      if (e.button !== 0) return
+
+      if (toolMode !== 'select') {
+        return
+      }
+
+      // 简化背景检查：只要不是元素本身就可以开始框选
+      // 实际上，我们可以允许在任何地方开始框选，因为用户可能想从元素上开始框选
+      // 但为了简单起见，我们先允许在任何地方开始
+      if (!containerRef.current) {
+        return
+      }
+
+      const rect = containerRef.current.getBoundingClientRect()
+      // 鼠标在容器内的坐标，不需要减 canvasOffset，因为框选相对于容器绘制
+      const startX = e.clientX - rect.left
+      const startY = e.clientY - rect.top
+
+      isBoxSelectingRef.current = true
+      setSelectionBox({
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+      })
+
+      // 阻止事件冒泡，避免触发其他点击事件
+      e.stopPropagation()
+    },
+    [toolMode, setSelectionBox],
+  )
+
+  // 更新框选区域大小 - 鼠标移动
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isBoxSelectingRef.current || !selectionBox || !containerRef.current)
+        return
+
+      const rect = containerRef.current.getBoundingClientRect()
+      // 同样，鼠标在容器内的坐标，不需要减 canvasOffset
+      const currentX = e.clientX - rect.left
+      const currentY = e.clientY - rect.top
+
+      setSelectionBox({
+        ...selectionBox,
+        currentX,
+        currentY,
+      })
+    },
+    [selectionBox, setSelectionBox],
+  )
+
+  // 结束框选 - 鼠标松开，选中所有在框内的元素
+  const handleMouseUp = useCallback(() => {
+    if (!isBoxSelectingRef.current || !selectionBox) {
+      isBoxSelectingRef.current = false
+      setSelectionBox(null)
+      return
+    }
+
+    // 需要转换为画布坐标进行碰撞检测
+    // selectionBox.startX 已经是容器坐标，减去 canvasOffset 得到画布坐标
+    const leftCanvas =
+      Math.min(selectionBox.startX, selectionBox.currentX) - canvasOffset.x
+    const rightCanvas =
+      Math.max(selectionBox.startX, selectionBox.currentX) - canvasOffset.x
+    const topCanvas =
+      Math.min(selectionBox.startY, selectionBox.currentY) - canvasOffset.y
+    const bottomCanvas =
+      Math.max(selectionBox.startY, selectionBox.currentY) - canvasOffset.y
+
+    // Find all elements that intersect with the selection box
+    // Approximate: check if element's bounding box intersects
+    const boxSelectedIds: string[] = []
+    elements.forEach((el) => {
+      // For simplicity, use element position and assume some default size
+      // TODO: Get actual bounding box from rendered elements
+      const elWidth = el.props.width || 200
+      const elHeight = el.props.height || 50
+      const elRight = el.position.x + elWidth
+      const elBottom = el.position.y + elHeight
+
+      // Check intersection
+      const intersects = !(
+        rightCanvas < el.position.x ||
+        leftCanvas > elRight ||
+        bottomCanvas < el.position.y ||
+        topCanvas > elBottom
+      )
+
+      if (intersects) {
+        boxSelectedIds.push(el.id)
+      }
+    })
+
+    // Select all elements in the box
+    setSelectedIds(boxSelectedIds)
+
+    isBoxSelectingRef.current = false
+    setSelectionBox(null)
+  }, [
+    selectionBox,
+    elements,
+    canvasOffset.x,
+    canvasOffset.y,
+    setSelectedIds,
+    setSelectionBox,
+  ])
+
+  // 拖拽结束时使用增量计算元素的新位置
   const handleElementDragEnd = (
     id: string,
-    info: { point: { x: number; y: number } },
+    element: CanvasElement,
+    _event: MouseEvent | PointerEvent | TouchEvent,
+    info: PanInfo,
   ) => {
-    if (!canvasRef.current) return
+    const scaleFactor = scale / 100
 
-    const rect = canvasRef.current.getBoundingClientRect()
-    const scaledX = (info.point.x - rect.left) / (scale / 100)
-    const scaledY = (info.point.y - rect.top) / (scale / 100)
+    // info.delta 是本次拖拽的增量（屏幕像素）
+    // 除以 scaleFactor 转换为画布原始坐标系
+    const deltaX = info.delta.x / scaleFactor
+    const deltaY = info.delta.y / scaleFactor
 
-    updateElementPosition(id, { x: scaledX, y: scaledY })
+    // 原位置加上增量得到新位置
+    const x = Math.round(element.position.x + deltaX)
+    const y = Math.round(element.position.y + deltaY)
+
+    updateElementPosition(id, { x, y })
+  }
+
+  // 批量拖拽过程中实时更新偏移 - 累积每次事件的增量
+  const handleMultiSelectionPan = (_: unknown, info: PanInfo) => {
+    if (selectedIds.length === 0) return
+
+    const scaleFactor = scale / 100
+    // info.delta 是本次事件相对于上一次事件的增量，累积它
+    const deltaX = info.delta.x / scaleFactor
+    const deltaY = info.delta.y / scaleFactor
+
+    // 累积总偏移
+    setMultiDragOffset((prev) => ({
+      x: prev.x + deltaX,
+      y: prev.y + deltaY,
+    }))
+  }
+
+  // 批量拖拽多个选中元素结束 - 提交累积的总偏移到原子状态
+  const handleMultiSelectionDragEnd = (_: unknown, _info: PanInfo) => {
+    if (selectedIds.length === 0) return
+
+    // 使用已经累积好的总偏移更新位置
+    const deltaX = Math.round(multiDragOffset.x)
+    const deltaY = Math.round(multiDragOffset.y)
+
+    // 更新所有选中元素的位置
+    const currentElements = getCanvasElements()
+    const updatedElements = currentElements.map((el) => {
+      if (selectedIds.includes(el.id)) {
+        return {
+          ...el,
+          position: {
+            x: el.position.x + deltaX,
+            y: el.position.y + deltaY,
+          },
+        }
+      }
+      return el
+    })
+
+    setCanvasElements(updatedElements)
+    // 重置实时偏移
+    setMultiDragOffset({ x: 0, y: 0 })
   }
 
   const renderElement = (element: CanvasElement) => {
@@ -87,27 +307,41 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     if (!componentMeta) return null
 
     const Component = componentMeta.component
-    const isSelected = selectedId === element.id
+    const isSelected = selectedIds.includes(element.id)
+
+    // 批量拖拽时，给选中元素添加实时偏移
+    const currentX =
+      selectedIds.includes(element.id) && multiDragOffset.x !== 0
+        ? element.position.x + multiDragOffset.x
+        : element.position.x
+    const currentY =
+      selectedIds.includes(element.id) && multiDragOffset.y !== 0
+        ? element.position.y + multiDragOffset.y
+        : element.position.y
 
     return (
       <m.div
         key={element.id}
-        drag
+        drag={toolMode === 'select'}
         dragMomentum={false}
-        onDragEnd={(_, info) => handleElementDragEnd(element.id, info)}
+        onDragEnd={(_event, info) =>
+          handleElementDragEnd(element.id, element, _event, info)
+        }
         onClick={(e) => {
           e.stopPropagation()
-          setSelectedId(element.id)
+          // Clicking an element selects only that one
+          setSelectedIds([element.id])
         }}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={Spring.presets.smooth}
         style={{
           position: 'absolute',
-          left: element.position.x,
-          top: element.position.y,
+          left: currentX,
+          top: currentY,
           zIndex: element.zIndex,
           boxShadow: isSelected ? '0 0 0 2px #3b82f6' : 'none',
+          pointerEvents: toolMode === 'pan' ? 'none' : 'auto',
         }}
         className="outline-none"
       >
@@ -116,51 +350,178 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     )
   }
 
-  const deviceClass = deviceSizes[device]
+  // 获取预览组件的预估尺寸
+  const getPreviewSize = (componentId: string) => {
+    switch (componentId) {
+      case 'text': {
+        return { width: 200, height: 40 }
+      }
+      case 'button': {
+        return { width: 100, height: 40 }
+      }
+      case 'input': {
+        return { width: 250, height: 40 }
+      }
+      case 'frame-mobile': {
+        return { width: 375, height: 667 }
+      }
+      case 'frame-tablet': {
+        return { width: 768, height: 1024 }
+      }
+      case 'frame-desktop': {
+        return { width: 1440, height: 1024 }
+      }
+      default: {
+        return { width: 150, height: 50 }
+      }
+    }
+  }
+
+  // 计算框选矩形的位置和大小（相对于容器）
+  const getSelectionBoxStyle = () => {
+    if (!selectionBox) return null
+
+    // selectionBox.startX/currentX 已经是容器坐标，直接使用
+    const left = Math.min(selectionBox.startX, selectionBox.currentX)
+    const top = Math.min(selectionBox.startY, selectionBox.currentY)
+    const width = Math.abs(selectionBox.currentX - selectionBox.startX)
+    const height = Math.abs(selectionBox.currentY - selectionBox.startY)
+
+    return { left, top, width, height }
+  }
+
+  // 计算多选元素的包围框（画布坐标系）
+  const getMultiSelectionBoundingBox = () => {
+    if (selectedIds.length === 0) return null
+    if (selectedIds.length === 1) return null // 单个元素由自身高亮边框显示
+
+    const selectedElements = elements.filter((el) =>
+      selectedIds.includes(el.id),
+    )
+    if (selectedElements.length === 0) return null
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    selectedElements.forEach((el) => {
+      const width = el.props.width || 200
+      const height = el.props.height || 50
+      minX = Math.min(minX, el.position.x)
+      minY = Math.min(minY, el.position.y)
+      maxX = Math.max(maxX, el.position.x + width)
+      maxY = Math.max(maxY, el.position.y + height)
+    })
+
+    // 添加padding让包围框更舒适
+    const padding = 4
+    return {
+      left: minX - padding,
+      top: minY - padding,
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2,
+    }
+  }
+
+  const boxStyle = getSelectionBoxStyle()
+  const multiSelectionBox = getMultiSelectionBoundingBox()
 
   return (
-    <main
-      className={cn(
-        'flex-1 overflow-auto flex justify-center items-center bg-bg',
-        className,
-      )}
+    <div
+      className={cn('absolute inset-0 bg-bg overflow-hidden', className)}
+      ref={containerRef}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onClick={handleCanvasClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
     >
-      <div
-        ref={canvasRef}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
+      {/* 无限画布背景 - 可整体拖拽平移，仅平移模式允许拖拽 */}
+      <m.div
+        drag={toolMode === 'pan'}
+        dragMomentum={false}
+        onPanEnd={handleCanvasPan}
         className={cn(
-          'border transition-all duration-200 relative overflow-hidden',
-          deviceClass,
+          'absolute inset-0 transition-colors',
+          toolMode === 'pan'
+            ? 'cursor-grab active:cursor-grabbing'
+            : 'cursor-default',
         )}
         style={{
-          transform: `scale(${scale / 100})`,
-          transformOrigin: 'center center',
-          backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
-          backgroundColor: '#ffffff',
+          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
         }}
+        transition={Spring.presets.smooth}
       >
-        {/* 圆点背景层 */}
+        {/* 无限大背景网格 - 提供无限画布视觉 */}
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-[-10000px] pointer-events-none"
           style={{
             backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)',
             backgroundSize: '20px 20px',
-            backgroundColor: '#ffffff',
+            backgroundColor: '#fafafa',
           }}
         />
-        {/* 内容层 */}
-        <div className="relative z-10 w-full h-full">
-          {elements.map((element) => renderElement(element))}
-          {elements.length === 0 && (
-            <div className="flex items-center justify-center h-full text-text-secondary">
-              <p>从左侧拖拽组件到这里开始编辑</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </main>
+
+        {/* 所有画布元素直接渲染在无限画布上 */}
+        {elements.map((element) => renderElement(element))}
+
+        {/* 拖拽预览 - 虚线边框 */}
+        {dragPreview && (
+          <div
+            className="border-2 border-dashed border-blue-500 bg-blue-50/30 pointer-events-none"
+            style={{
+              position: 'absolute',
+              left: dragPreview.x,
+              top: dragPreview.y,
+              ...getPreviewSize(dragPreview.componentId),
+            }}
+          />
+        )}
+
+        {elements.length === 0 && !dragPreview && !selectionBox && (
+          <div className="flex items-center justify-center w-screen h-screen text-text-secondary">
+            <p>从左侧拖拽组件到这里开始编辑</p>
+          </div>
+        )}
+
+        {/* 多选持久化包围框 - 跟随画布偏移，可拖动批量移动 */}
+        {multiSelectionBox && toolMode === 'select' && (
+          <m.div
+            drag={false}
+            onPan={handleMultiSelectionPan}
+            onPanEnd={handleMultiSelectionDragEnd}
+            onMouseDown={(e) => {
+              // 阻止事件冒泡，不触发画布的框选
+              e.stopPropagation()
+            }}
+            className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-auto cursor-move z-40"
+            style={{
+              left: multiSelectionBox.left + multiDragOffset.x,
+              top: multiSelectionBox.top + multiDragOffset.y,
+              width: multiSelectionBox.width,
+              height: multiSelectionBox.height,
+            }}
+            transition={Spring.presets.smooth}
+          />
+        )}
+      </m.div>
+
+      {/* 框选矩形 - 跟随鼠标拖拽，放在最外层不跟随画布偏移 */}
+      {boxStyle && (
+        <div
+          className="absolute border-2 border-dashed border-blue-500 bg-blue-500/20 pointer-events-none z-50"
+          style={{
+            left: boxStyle.left,
+            top: boxStyle.top,
+            width: boxStyle.width,
+            height: boxStyle.height,
+          }}
+        />
+      )}
+    </div>
   )
 }

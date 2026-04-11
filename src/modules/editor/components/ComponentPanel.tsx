@@ -65,7 +65,7 @@ export const ComponentPanel: React.FC<ComponentPanelProps> = ({
   return (
     <aside
       className={cn(
-        'w-64 border-r bg-bg-fill p-4 overflow-y-auto h-screen',
+        'fixed left-0 top-0 w-64 border-r bg-bg-fill p-4 overflow-y-auto h-screen z-50 shadow-lg',
         className,
       )}
     >

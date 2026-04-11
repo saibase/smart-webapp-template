@@ -733,3 +733,6 @@ export const Component = () => {
     </div>
   )
 }
+
+export const loader = undefined
+export const handle = undefined

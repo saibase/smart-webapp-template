@@ -1,9 +1,9 @@
 import * as React from 'react'
 
 import {
-  deleteSelectedElement,
+  deleteSelectedElements,
   updateElementProps,
-  useSelectedElementValue,
+  useSelectedElementsValue,
 } from '~/atoms/editor'
 import {
   Accordion,
@@ -20,22 +20,27 @@ type PropsPanelProps = {
 }
 
 export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
-  const selected = useSelectedElementValue()
+  const selectedElements = useSelectedElementsValue()
+  const selectedCount = selectedElements.length
 
-  if (!selected) {
+  if (selectedCount === 0) {
     return (
       <aside
         className={cn(
-          'w-64 border-l bg-bg-fill p-4 overflow-y-auto h-screen',
+          'fixed right-0 top-0 w-64 border-l bg-bg-fill p-4 overflow-y-auto h-screen z-50 shadow-lg',
           className,
         )}
       >
         <div className="flex items-center justify-center h-full text-text-secondary">
-          <p>请选择一个元素进行编辑</p>
+          <p>请选择一个或多个元素进行编辑</p>
         </div>
       </aside>
     )
   }
+
+  // For multiple selection, only edit the first element
+  // This is a simple approach - bulk editing can be added later if needed
+  const selected = selectedElements[0]
 
   const handlePropChange = (key: string, value: any) => {
     // 处理嵌套属性
@@ -51,7 +56,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
   }
 
   const handleDelete = () => {
-    deleteSelectedElement()
+    deleteSelectedElements()
   }
 
   // 动态生成输入项
@@ -154,18 +159,25 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
   return (
     <aside
       className={cn(
-        'w-64 border-l bg-bg-fill p-4 overflow-y-auto h-screen',
+        'fixed right-0 top-0 w-64 border-l bg-bg-fill p-4 overflow-y-auto h-screen z-50 shadow-lg',
         className,
       )}
     >
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-text">属性面板</h2>
         <Button variant="destructive" size="sm" onClick={handleDelete}>
-          删除
+          删除{selectedCount > 1 ? ` (${selectedCount})` : ''}
         </Button>
       </div>
 
       <div className="mb-4">
+        {selectedCount > 1 && (
+          <p className="text-sm text-text-secondary mb-2">
+            <span className="font-medium text-text">
+              {selectedCount} 个元素已选中
+            </span>
+          </p>
+        )}
         <p className="text-sm text-text-secondary">
           元素类型:{' '}
           <span className="font-medium text-text">{selected.type}</span>
@@ -175,6 +187,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
           <span className="font-medium text-text">
             {selected.id.slice(0, 8)}
           </span>
+          {selectedCount > 1 && ` (+ ${selectedCount - 1})`}
         </p>
       </div>
 

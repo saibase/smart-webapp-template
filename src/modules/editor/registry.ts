@@ -1,9 +1,10 @@
 import { Button } from './components/Button'
+import { Frame } from './components/Frame'
 import { Heading } from './components/Heading'
 import { Input } from './components/Input'
 import { Text } from './components/Text'
 
-export type ComponentCategory = '基础' | '表单'
+export type ComponentCategory = '基础' | '容器' | '表单'
 
 export type ComponentMeta = {
   id: string
@@ -60,6 +61,42 @@ export const componentRegistry: ComponentMeta[] = [
       },
     },
     component: Input,
+  },
+  {
+    id: 'frame-mobile',
+    name: '手机容器',
+    category: '容器',
+    defaultProps: {
+      width: 375,
+      height: 667,
+      backgroundColor: '#ffffff',
+      padding: 0,
+    },
+    component: Frame,
+  },
+  {
+    id: 'frame-tablet',
+    name: '平板容器',
+    category: '容器',
+    defaultProps: {
+      width: 768,
+      height: 1024,
+      backgroundColor: '#ffffff',
+      padding: 0,
+    },
+    component: Frame,
+  },
+  {
+    id: 'frame-desktop',
+    name: '桌面容器',
+    category: '容器',
+    defaultProps: {
+      width: 1440,
+      height: 1024,
+      backgroundColor: '#ffffff',
+      padding: 0,
+    },
+    component: Frame,
   },
 ]
 
