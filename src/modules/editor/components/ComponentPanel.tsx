@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Input } from '~/components/ui/input/Input'
 import { cn } from '~/lib/cn'
 
-import type { ComponentMeta } from '../../editor/registry'
-import { componentRegistry } from '../../editor/registry'
+import type { ComponentMeta } from '../registry'
+import { fullComponentRegistry } from '../registry'
 
 type ComponentPanelProps = {
   className?: string
@@ -19,11 +19,17 @@ export const ComponentPanel: React.FC<ComponentPanelProps> = ({
     Record<string, boolean>
   >({
     基础: true,
+    容器: true,
     表单: true,
+    导航: true,
+    反馈: true,
+    展示: true,
+    业务: true,
+    其他: true,
   })
 
   // 按分类分组组件
-  const groupedComponents = componentRegistry.reduce(
+  const groupedComponents = fullComponentRegistry.reduce(
     (acc, component) => {
       if (!acc[component.category]) {
         acc[component.category] = []
