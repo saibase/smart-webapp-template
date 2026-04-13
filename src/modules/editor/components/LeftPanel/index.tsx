@@ -17,7 +17,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ className }) => {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-[84px] w-64 h-[calc(100vh-84px)] z-50',
+        'fixed left-0 top-11 w-64 h-[calc(100vh-44px)] z-50',
         'flex flex-col',
         'bg-bg-fill border-r border-border shadow-lg',
         className,

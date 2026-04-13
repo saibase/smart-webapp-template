@@ -143,11 +143,9 @@ const ToolIcon: React.FC<{ id: string }> = ({ id }) => {
 }
 
 // ─────────────────────────────────────────────────────────
-// TopBar（双行）
-// 上行 h-11，下行 h-10，总高 84px
+// TopBar（单行）h-11 = 44px
 // ─────────────────────────────────────────────────────────
-/** 上行高度 44px + 下行高度 40px = 84px，对应 Tailwind top-[84px] */
-export const TOP_BAR_HEIGHT = 84
+export const TOP_BAR_HEIGHT = 44
 
 export const TopBar: React.FC = () => {
   const [toolMode, setToolMode] = useToolMode()
@@ -161,125 +159,29 @@ export const TopBar: React.FC = () => {
     }))
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-[70] bg-bg-fill border-b border-border select-none shrink-0">
-      {/* ══ 上行：Logo + 工作流居中 + 全局操作 ══ */}
-      <div className="relative flex items-center h-11 border-b border-border">
-        {/* ── Logo ──────────────────────────────── */}
-        <div className="flex items-center gap-2 px-3 shrink-0 border-r border-border h-full">
-          <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-            >
-              <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" />
-            </svg>
-          </div>
-          <span className="text-xs font-semibold text-text hidden lg:block">
-            SmartUi
-          </span>
-        </div>
-
-        {/* ── 居中：工作流标签 + 缩放 ─────────── */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-          {/* 工作流标签 */}
-          <div className="flex items-center rounded-lg border border-border overflow-hidden">
-            {WORKFLOW_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setWorkflow(tab.key)}
-                className={cn(
-                  'px-3 h-7 text-xs font-medium transition-colors',
-                  workflow === tab.key
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-text-secondary hover:bg-fill-secondary hover:text-text',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* 缩放控件 */}
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => changeScale(-10)}
-              className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-fill-secondary transition-colors text-lg leading-none"
-            >
-              −
-            </button>
-            <span className="text-xs font-medium text-text w-10 text-center tabular-nums">
-              {scale}%
-            </span>
-            <button
-              type="button"
-              onClick={() => changeScale(10)}
-              className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-fill-secondary transition-colors text-lg leading-none"
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        {/* ── 右侧弹性占位 ──────────────────────── */}
-        <div className="flex-1" />
-
-        {/* ── 全局操作 ──────────────────────────── */}
-        <div className="flex items-center gap-1.5 px-3 shrink-0">
-          {/* 分享 */}
-          <button
-            type="button"
-            className="flex items-center gap-1 px-2.5 h-7 text-xs text-text-secondary border border-border rounded-md hover:bg-fill-secondary transition-colors"
+    <header className="fixed top-0 left-0 right-0 h-11 z-[70] flex items-center bg-bg-fill border-b border-border select-none shrink-0 relative">
+      {/* ── Logo ──────────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 shrink-0 border-r border-border h-full">
+        <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <circle cx="18" cy="5" r="3" />
-              <circle cx="6" cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
-              <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
-            </svg>
-            分享
-          </button>
-          {/* 原型播放 */}
-          <button
-            type="button"
-            title="原型预览"
-            className="flex items-center justify-center w-7 h-7 rounded-md text-text-secondary hover:bg-fill-secondary transition-colors"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M5 3l14 9-14 9V3z" />
-            </svg>
-          </button>
-          {/* AI */}
-          <button
-            type="button"
-            title="AI 辅助设计"
-            className="w-7 h-7 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[10px] font-bold"
-          >
-            AI
-          </button>
-          {/* 头像 */}
-          <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity">
-            U
-          </div>
+            <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" />
+          </svg>
         </div>
+        <span className="text-xs font-semibold text-text hidden lg:block">
+          SmartUi
+        </span>
       </div>
 
-      {/* ══ 下行：13 个工具按钮居中 ══ */}
-      <div className="flex items-center justify-center h-10 gap-0.5 px-2">
+      {/* ── 13 个工具按钮（绝对居中）── */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5">
         {TOOLS.map((tool, i) => {
           if (tool.type === 'sep') {
             return (
@@ -309,6 +211,92 @@ export const TopBar: React.FC = () => {
             </button>
           )
         })}
+      </div>
+
+      {/* ── 弹性占位 ──────────────────────────── */}
+      <div className="flex-1" />
+
+      {/* ── 工作流标签 + 缩放（距右边缘 20%）── */}
+      <div className="absolute right-[20%] flex items-center gap-2">
+        <div className="flex items-center rounded-lg border border-border overflow-hidden">
+          {WORKFLOW_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setWorkflow(tab.key)}
+              className={cn(
+                'px-3 h-7 text-xs font-medium transition-colors',
+                workflow === tab.key
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-text-secondary hover:bg-fill-secondary hover:text-text',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => changeScale(-10)}
+            className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-fill-secondary transition-colors text-lg leading-none"
+          >
+            −
+          </button>
+          <span className="text-xs font-medium text-text w-10 text-center tabular-nums">
+            {scale}%
+          </span>
+          <button
+            type="button"
+            onClick={() => changeScale(10)}
+            className="w-6 h-6 flex items-center justify-center rounded text-text-secondary hover:bg-fill-secondary transition-colors text-lg leading-none"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* ── 全局操作 ──────────────────────────── */}
+      <div className="flex items-center gap-1.5 px-3 shrink-0">
+        <button
+          type="button"
+          className="flex items-center gap-1 px-2.5 h-7 text-xs text-text-secondary border border-border rounded-md hover:bg-fill-secondary transition-colors"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+          </svg>
+          分享
+        </button>
+        <button
+          type="button"
+          title="原型预览"
+          className="flex items-center justify-center w-7 h-7 rounded-md text-text-secondary hover:bg-fill-secondary transition-colors"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5 3l14 9-14 9V3z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          title="AI 辅助设计"
+          className="w-7 h-7 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[10px] font-bold"
+        >
+          AI
+        </button>
+        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity">
+          U
+        </div>
       </div>
     </header>
   )

@@ -129,12 +129,12 @@ export const VisualEditor: React.FC = () => {
       {/* 顶部操作栏（h-11 = 44px，z-[70]）*/}
       <TopBar />
 
-      {/* 画布（顶部留出 84px 给 TopBar 双行）*/}
-      <div className="absolute inset-0 pt-[84px]">
+      {/* 画布（顶部留出 44px 给 TopBar）*/}
+      <div className="absolute inset-0 pt-11">
         <Canvas />
       </div>
 
-      {/* 左侧面板（top-[84px] 紧贴 TopBar 下方）*/}
+      {/* 左侧面板（top-11 紧贴 TopBar 下方）*/}
       <LeftPanel />
 
       {/* 右侧属性面板 */}
