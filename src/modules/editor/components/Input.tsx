@@ -7,10 +7,15 @@ type InputProps = {
   style?: {
     backgroundColor?: string
     color?: string
+    fontSize?: string
     borderColor?: string
+    borderWidth?: string
+    borderStyle?: string
     padding?: string
+    margin?: string
     borderRadius?: string
-    width?: string
+    width?: string | number
+    height?: string | number
   }
   className?: string
   value?: string
