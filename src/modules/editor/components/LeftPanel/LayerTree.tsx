@@ -1,19 +1,38 @@
+/**
+ * 图层树
+ * - 显示画布元素的树形层级结构
+ * - 支持点击选中、双击重命名、显隐、锁定
+ * - 支持拖拽改变父子关系（locked 图层不可拖拽也不可作为目标）
+ * - 拖拽模式：
+ *     前 30% 区域 → 插入为同级（before）
+ *     中 40% 区域 → 成为子节点（child）
+ *     后 30% 区域 → 插入为同级（after）
+ */
 import * as React from 'react'
-import { useCallback } from 'react'
+import { createContext, useCallback, useRef, useState } from 'react'
 
 import type { CanvasElement } from '~/atoms/editor'
 import {
+  renameLayer,
+  reparentElement,
   updateElementProps,
   useCanvasElementsValue,
   useExpandedLayerIdsValue,
   useLayerSearchQueryValue,
+  useRenamingLayerIdValue,
   useSelectedElementIdsValue,
+  useSelectedElementsValue,
   useSetExpandedLayerIds,
+  useSetRenamingLayerId,
   useSetSelectedElementIds,
 } from '~/atoms/editor'
 import { cn } from '~/lib/cn'
 
-// ── 图层类型对应图标 ──────────────────────────────────
+import { LayerContextMenu } from './LayerContextMenu'
+
+// ─────────────────────────────────────────────────────────
+// 图标
+// ─────────────────────────────────────────────────────────
 const typeIconMap: Record<string, React.ReactNode> = {
   frame: (
     <svg
@@ -77,7 +96,6 @@ const typeIconMap: Record<string, React.ReactNode> = {
     </svg>
   ),
 }
-
 const DefaultIcon = () => (
   <svg
     width="12"
@@ -91,7 +109,6 @@ const DefaultIcon = () => (
   </svg>
 )
 
-// ── 显隐图标 ────────────────────────────────────────
 const EyeIcon = ({ hidden }: { hidden?: boolean }) => (
   <svg
     width="13"
@@ -116,7 +133,6 @@ const EyeIcon = ({ hidden }: { hidden?: boolean }) => (
   </svg>
 )
 
-// ── 锁定图标 ────────────────────────────────────────
 const LockIcon = ({ locked }: { locked?: boolean }) => (
   <svg
     width="12"
@@ -141,7 +157,6 @@ const LockIcon = ({ locked }: { locked?: boolean }) => (
   </svg>
 )
 
-// ── 展开/折叠箭头 ────────────────────────────────────
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <svg
     width="10"
@@ -160,99 +175,202 @@ const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   </svg>
 )
 
-// ── 获取图层显示名称 ─────────────────────────────────
-const getLayerName = (el: CanvasElement): string => {
-  return (
-    el.props?.label ||
-    el.props?.content ||
-    el.props?.text ||
-    el.props?.title ||
-    el.type
-  )
+// ─────────────────────────────────────────────────────────
+// 获取图层显示名
+// ─────────────────────────────────────────────────────────
+const getLayerName = (el: CanvasElement) =>
+  el.props?.label ||
+  el.props?.content ||
+  el.props?.text ||
+  el.props?.title ||
+  el.type
+
+// ─────────────────────────────────────────────────────────
+// 拖拽上下文
+// ─────────────────────────────────────────────────────────
+type DropPosition = 'before' | 'child' | 'after'
+
+type DragContextType = {
+  /** 当前被拖拽的图层 id */
+  draggedId: string | null
+  /** 悬停目标 */
+  dropInfo: { id: string; position: DropPosition } | null
+  onDragStart: (id: string, locked: boolean) => void
+  onDragEnd: () => void
+  onDragOver: (e: React.DragEvent, id: string, locked: boolean) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent, targetId: string, targetLocked: boolean) => void
 }
 
-// ── 单个图层节点 ─────────────────────────────────────
+const DragContext = createContext<DragContextType>({
+  draggedId: null,
+  dropInfo: null,
+  onDragStart: () => {},
+  onDragEnd: () => {},
+  onDragOver: () => {},
+  onDragLeave: () => {},
+  onDrop: () => {},
+})
+
+// ─────────────────────────────────────────────────────────
+// 计算悬停区域位置（前/子/后）
+// ─────────────────────────────────────────────────────────
+const calcDropPosition = (e: React.DragEvent): DropPosition => {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const relY = e.clientY - rect.top
+  const ratio = relY / rect.height
+  if (ratio < 0.3) return 'before'
+  if (ratio > 0.7) return 'after'
+  return 'child'
+}
+
+// ─────────────────────────────────────────────────────────
+// 单个图层节点
+// ─────────────────────────────────────────────────────────
 type LayerNodeProps = {
   element: CanvasElement
   depth: number
-  children?: CanvasElement[]
+  childElements: CanvasElement[]
   allElements: CanvasElement[]
+  onContextMenu: (state: {
+    x: number
+    y: number
+    element: CanvasElement
+  }) => void
 }
 
 const LayerNode: React.FC<LayerNodeProps> = ({
   element,
   depth,
-  children = [],
+  childElements,
   allElements,
+  onContextMenu,
 }) => {
   const selectedIds = useSelectedElementIdsValue()
   const setSelectedIds = useSetSelectedElementIds()
   const expandedIds = useExpandedLayerIdsValue()
   const setExpandedIds = useSetExpandedLayerIds()
+  const renamingId = useRenamingLayerIdValue()
+  const setRenamingId = useSetRenamingLayerId()
+  const drag = use(DragContext)
+
+  const renameInputRef = useRef<HTMLInputElement>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const isSelected = selectedIds.includes(element.id)
-  const hasChildren = children.length > 0
+  const hasChildren = childElements.length > 0
   const isExpanded = expandedIds.includes(element.id)
   const isHidden = element.props?.visible === false
   const isLocked = element.props?.locked === true
+  const isRenaming = renamingId === element.id
+  const isDragging = drag.draggedId === element.id
 
+  // 是当前悬停目标
+  const dropInfo = drag.dropInfo?.id === element.id ? drag.dropInfo : null
+
+  // 进入重命名时聚焦
+  React.useEffect(() => {
+    if (isRenaming) {
+      setRenameValue(getLayerName(element))
+      const t = setTimeout(() => renameInputRef.current?.select(), 0)
+      return () => clearTimeout(t)
+    }
+  }, [isRenaming, element])
+
+  const commitRename = () => {
+    if (renameValue.trim()) renameLayer(element.id, renameValue.trim())
+    setRenamingId(null)
+  }
+
+  // ── 点击选中 ──
   const handleSelect = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isLocked) return
+    if (isRenaming) return
     if (e.metaKey || e.ctrlKey) {
-      // 多选
-      if (isSelected) {
-        setSelectedIds(selectedIds.filter((id) => id !== element.id))
-      } else {
-        setSelectedIds([...selectedIds, element.id])
-      }
+      setSelectedIds(
+        isSelected
+          ? selectedIds.filter((id) => id !== element.id)
+          : [...selectedIds, element.id],
+      )
     } else {
       setSelectedIds([element.id])
     }
   }
 
+  // ── 双击重命名 ──
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRenamingId(element.id)
+  }
+
+  // ── 展开/折叠 ──
   const handleToggleExpand = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!hasChildren) return
-    if (isExpanded) {
-      setExpandedIds(expandedIds.filter((id) => id !== element.id))
-    } else {
-      setExpandedIds([...expandedIds, element.id])
-    }
+    setExpandedIds(
+      isExpanded
+        ? expandedIds.filter((id) => id !== element.id)
+        : [...expandedIds, element.id],
+    )
   }
 
+  // ── 显隐 ──（isHidden=false 时隐藏，isHidden=true 时显示）
   const handleToggleVisible = (e: React.MouseEvent) => {
     e.stopPropagation()
-    updateElementProps(element.id, { visible: !isHidden })
+    updateElementProps(element.id, { visible: isHidden ? true : false })
   }
 
+  // ── 锁定 ──
   const handleToggleLock = (e: React.MouseEvent) => {
     e.stopPropagation()
     updateElementProps(element.id, { locked: !isLocked })
   }
 
+  // ── 右键菜单 ──
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isSelected) setSelectedIds([element.id])
+    onContextMenu({ x: e.clientX, y: e.clientY, element })
+  }
+
   const TypeIcon = typeIconMap[element.type] ?? <DefaultIcon />
-  const layerName = getLayerName(element)
-  const indentPx = depth * 12
+  const indentPx = 8 + depth * 12
 
   return (
-    <div>
+    <div className={cn(isDragging && 'opacity-40')}>
+      {/* 前插入线 */}
+      {dropInfo?.position === 'before' && (
+        <div className="h-0.5 bg-primary mx-2 rounded-full" />
+      )}
+
       <div
+        draggable={!isLocked}
+        onDragStart={() => drag.onDragStart(element.id, isLocked)}
+        onDragEnd={drag.onDragEnd}
+        onDragOver={(e) => drag.onDragOver(e, element.id, isLocked)}
+        onDragLeave={drag.onDragLeave}
+        onDrop={(e) => drag.onDrop(e, element.id, isLocked)}
         className={cn(
-          'group flex items-center gap-1 pr-1 py-[3px] rounded cursor-pointer select-none',
+          'group/node flex items-center gap-1 pr-1 py-[3px] rounded cursor-pointer select-none',
           isSelected
             ? 'bg-primary/15 text-primary'
             : 'text-text-secondary hover:bg-fill-secondary hover:text-text',
-          isHidden && 'opacity-40',
+          isHidden && !isSelected && 'opacity-40',
+          // 子节点拖入高亮
+          dropInfo?.position === 'child' &&
+            'ring-2 ring-inset ring-primary bg-primary/10 !text-primary',
         )}
-        style={{ paddingLeft: `${8 + indentPx}px` }}
+        style={{ paddingLeft: `${indentPx}px` }}
         onClick={handleSelect}
+        onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
       >
-        {/* 展开/折叠箭头 */}
+        {/* 展开箭头 */}
         <span
           className={cn(
             'flex-none w-3 flex items-center justify-center',
-            !hasChildren && 'opacity-0',
+            !hasChildren && 'opacity-0 pointer-events-none',
           )}
           onClick={handleToggleExpand}
         >
@@ -262,14 +380,40 @@ const LayerNode: React.FC<LayerNodeProps> = ({
         {/* 类型图标 */}
         <span className="flex-none opacity-60">{TypeIcon}</span>
 
-        {/* 图层名称 */}
-        <span className="flex-1 text-xs truncate min-w-0">{layerName}</span>
+        {/* 图层名 / 内联重命名 */}
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            className="flex-1 min-w-0 text-xs bg-bg-fill border border-primary rounded px-1 outline-none text-text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitRename()
+              if (e.key === 'Escape') setRenamingId(null)
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="flex-1 text-xs truncate min-w-0">
+            {getLayerName(element)}
+          </span>
+        )}
 
-        {/* 操作按钮（hover 时显示） */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* 状态按钮：激活态始终显示，否则 hover 显示 */}
+        <div
+          className={cn(
+            'flex items-center gap-0.5 transition-opacity shrink-0',
+            isHidden || isLocked
+              ? 'opacity-100'
+              : 'opacity-0 group-hover/node:opacity-100',
+          )}
+        >
           <button
             type="button"
-            title={isHidden ? '显示' : '隐藏'}
+            title={
+              isHidden ? '显示图层（Shift+Cmd+H）' : '隐藏图层（Shift+Cmd+H）'
+            }
             onClick={handleToggleVisible}
             className={cn(
               'flex items-center justify-center w-5 h-5 rounded hover:bg-fill-tertiary transition-colors',
@@ -280,7 +424,9 @@ const LayerNode: React.FC<LayerNodeProps> = ({
           </button>
           <button
             type="button"
-            title={isLocked ? '解锁' : '锁定'}
+            title={
+              isLocked ? '解锁图层（Shift+Cmd+L）' : '锁定图层（Shift+Cmd+L）'
+            }
             onClick={handleToggleLock}
             className={cn(
               'flex items-center justify-center w-5 h-5 rounded hover:bg-fill-tertiary transition-colors',
@@ -292,53 +438,130 @@ const LayerNode: React.FC<LayerNodeProps> = ({
         </div>
       </div>
 
-      {/* 子节点 */}
+      {/* 后插入线 */}
+      {dropInfo?.position === 'after' && (
+        <div className="h-0.5 bg-primary mx-2 rounded-full" />
+      )}
+
+      {/* 子节点递归 */}
       {hasChildren && isExpanded && (
         <div>
-          {children.map((child) => {
-            const grandChildren = allElements.filter(
-              (el) => el.parentId === child.id,
-            )
-            return (
-              <LayerNode
-                key={child.id}
-                element={child}
-                depth={depth + 1}
-                children={grandChildren}
-                allElements={allElements}
-              />
-            )
-          })}
+          {childElements.map((child) => (
+            <LayerNode
+              key={child.id}
+              element={child}
+              depth={depth + 1}
+              childElements={allElements.filter(
+                (el) => el.parentId === child.id,
+              )}
+              allElements={allElements}
+              onContextMenu={onContextMenu}
+            />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ── 图层树主体 ───────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// 图层树根组件
+// ─────────────────────────────────────────────────────────
 export const LayerTree: React.FC = () => {
   const elements = useCanvasElementsValue()
   const searchQuery = useLayerSearchQueryValue()
+  const selectedElements = useSelectedElementsValue()
 
-  // 构建树：根节点（无 parentId）
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number
+    y: number
+    element: CanvasElement
+  } | null>(null)
+
+  // ── 拖拽状态 ──
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dropInfo, setDropInfo] = useState<{
+    id: string
+    position: DropPosition
+  } | null>(null)
+
+  const onDragStart = useCallback((id: string, locked: boolean) => {
+    if (locked) return
+    setDraggedId(id)
+  }, [])
+
+  const onDragEnd = useCallback(() => {
+    setDraggedId(null)
+    setDropInfo(null)
+  }, [])
+
+  const onDragOver = useCallback(
+    (e: React.DragEvent, id: string, locked: boolean) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // 目标锁定 → 拒绝，显示禁止光标
+      if (locked || id === draggedId) {
+        e.dataTransfer.dropEffect = 'none'
+        setDropInfo(null)
+        return
+      }
+      e.dataTransfer.dropEffect = 'move'
+      const position = calcDropPosition(e)
+      setDropInfo({ id, position })
+    },
+    [draggedId],
+  )
+
+  const onDragLeave = useCallback(() => {
+    setDropInfo(null)
+  }, [])
+
+  const onDrop = useCallback(
+    (e: React.DragEvent, targetId: string, targetLocked: boolean) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!draggedId || targetLocked || draggedId === targetId) {
+        setDraggedId(null)
+        setDropInfo(null)
+        return
+      }
+      const position = dropInfo?.position ?? 'child'
+      reparentElement(draggedId, targetId, position)
+      setDraggedId(null)
+      setDropInfo(null)
+    },
+    [draggedId, dropInfo],
+  )
+
+  const dragCtx: DragContextType = {
+    draggedId,
+    dropInfo,
+    onDragStart,
+    onDragEnd,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+  }
+
+  // ── 树形数据 ──
   const rootElements = elements
     .filter((el) => !el.parentId)
-    .sort((a, b) => b.zIndex - a.zIndex) // 按 zIndex 从高到低展示（上层在前）
+    .sort((a, b) => b.zIndex - a.zIndex)
 
-  // 搜索过滤：扁平化匹配
-  const filterElement = useCallback(
+  const filterEl = useCallback(
     (el: CanvasElement) => {
       if (!searchQuery) return true
       const name = getLayerName(el).toLowerCase()
-      const id = el.id.toLowerCase()
-      const q = searchQuery.toLowerCase()
-      return name.includes(q) || id.includes(q)
+      return (
+        name.includes(searchQuery.toLowerCase()) ||
+        el.id.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     },
     [searchQuery],
   )
 
   const filteredRoots = searchQuery
-    ? elements.filter((el) => !el.parentId && filterElement(el))
+    ? rootElements.filter((el) => filterEl(el))
     : rootElements
 
   if (elements.length === 0) {
@@ -369,19 +592,31 @@ export const LayerTree: React.FC = () => {
   }
 
   return (
-    <div className="py-1">
-      {filteredRoots.map((el) => {
-        const children = elements.filter((c) => c.parentId === el.id)
-        return (
+    <DragContext value={dragCtx}>
+      <div className="py-1">
+        {filteredRoots.map((el) => (
           <LayerNode
             key={el.id}
             element={el}
             depth={0}
-            children={children}
+            childElements={elements.filter((c) => c.parentId === el.id)}
             allElements={elements}
+            onContextMenu={setCtxMenu}
           />
-        )
-      })}
-    </div>
+        ))}
+      </div>
+
+      {ctxMenu && (
+        <LayerContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          targetElement={ctxMenu.element}
+          selectedElements={
+            selectedElements.length > 0 ? selectedElements : [ctxMenu.element]
+          }
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+    </DragContext>
   )
 }

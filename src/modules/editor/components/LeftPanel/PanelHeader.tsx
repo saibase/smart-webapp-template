@@ -1,11 +1,9 @@
 import * as React from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 import type { LeftPanelTab } from '~/atoms/editor'
 import { useLeftPanelTabValue, useSetLeftPanelTab } from '~/atoms/editor'
 import { cn } from '~/lib/cn'
-
-// 面包屑路径数据（实际项目中可接入路由）
-const breadcrumbs = ['草稿箱', '积分签到']
 
 const tabs: { key: LeftPanelTab; label: string }[] = [
   { key: 'layers', label: '图层' },
@@ -15,19 +13,23 @@ const tabs: { key: LeftPanelTab; label: string }[] = [
 export const PanelHeader: React.FC = () => {
   const activeTab = useLeftPanelTabValue()
   const setTab = useSetLeftPanelTab()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const fileName =
+    (location.state as { fileName?: string } | null)?.fileName ?? '未命名文件'
 
   return (
     <div className="flex flex-col border-b border-border">
       {/* 面包屑 */}
       <div className="flex items-center gap-1 px-3 py-2 text-xs text-text-tertiary select-none">
-        {breadcrumbs.map((crumb, i) => (
-          <React.Fragment key={crumb}>
-            {i > 0 && <span className="opacity-50">/</span>}
-            <span className="cursor-pointer hover:text-text transition-colors truncate">
-              {crumb}
-            </span>
-          </React.Fragment>
-        ))}
+        <span
+          className="cursor-pointer hover:text-text transition-colors truncate"
+          onClick={() => navigate('/')}
+        >
+          草稿箱
+        </span>
+        <span className="opacity-50">/</span>
+        <span className="truncate text-text">{fileName}</span>
       </div>
 
       {/* 图层 / 资源 Tab */}

@@ -393,6 +393,11 @@ export const groupSelectedElements = () => {
 
   setCanvasElements(updatedElements)
   setSelectedElementIds([groupId])
+  // 编组后自动展开，使子图层可见
+  const expanded = getExpandedLayerIds()
+  if (!expanded.includes(groupId)) {
+    setExpandedLayerIds([...expanded, groupId])
+  }
 }
 
 // ───────── 左侧面板 hooks ─────────
@@ -471,4 +476,336 @@ export const ungroupElements = (groupId: string) => {
 
   setCanvasElements(updatedElements)
   setSelectedElementIds([])
+}
+
+// ───────── 元素绝对坐标计算（考虑父子嵌套）─────────
+export const getAbsolutePosition = (
+  elementId: string,
+  allElements: CanvasElement[],
+): { x: number; y: number } => {
+  const el = allElements.find((e) => e.id === elementId)
+  if (!el) return { x: 0, y: 0 }
+  if (!el.parentId) return { ...el.position }
+  const parentPos = getAbsolutePosition(el.parentId, allElements)
+  return { x: parentPos.x + el.position.x, y: parentPos.y + el.position.y }
+}
+
+// 判断 ancestorId 是否是 childId 的祖先
+const isAncestorOf = (
+  ancestorId: string,
+  childId: string,
+  allElements: CanvasElement[],
+): boolean => {
+  const child = allElements.find((e) => e.id === childId)
+  if (!child?.parentId) return false
+  if (child.parentId === ancestorId) return true
+  return isAncestorOf(ancestorId, child.parentId, allElements)
+}
+
+// ───────── 图层重组（拖拽至目标图层）─────────
+// mode 'child'  → 成为 targetId 的子节点
+// mode 'before' → 成为 targetId 的前置同级
+// mode 'after'  → 成为 targetId 的后置同级
+export const reparentElement = (
+  elementId: string,
+  targetId: string | null,
+  mode: 'before' | 'child' | 'after' = 'child',
+) => {
+  const elements = getCanvasElements()
+  const el = elements.find((e) => e.id === elementId)
+  if (!el) return
+  if (elementId === targetId) return
+  // 源元素本身锁定 → 不可拖
+  if (el.props?.locked) return
+  // 源元素的父级锁定 → 不可从父级中拖出
+  if (el.parentId) {
+    const parent = elements.find((e) => e.id === el.parentId)
+    if (parent?.props?.locked) return
+  }
+  // 不允许将元素挂到自己的后代上（避免循环引用）
+  if (targetId && isAncestorOf(elementId, targetId, elements)) return
+
+  // 目标自身或目标父级锁定 → 不可落入
+  if (targetId) {
+    const target = elements.find((e) => e.id === targetId)
+    if (target?.props?.locked) return
+    // before/after 模式：新父级 = 目标的父级，检查父级锁定
+    if (mode !== 'child' && target?.parentId) {
+      const targetParent = elements.find((e) => e.id === target.parentId)
+      if (targetParent?.props?.locked) return
+    }
+  }
+
+  const elAbsPos = getAbsolutePosition(elementId, elements)
+
+  let newParentId: string | undefined
+  let newPosition: { x: number; y: number }
+  let newZIndex: number | undefined
+
+  if (mode === 'child' && targetId) {
+    newParentId = targetId
+    const targetAbsPos = getAbsolutePosition(targetId, elements)
+    newPosition = {
+      x: elAbsPos.x - targetAbsPos.x,
+      y: elAbsPos.y - targetAbsPos.y,
+    }
+  } else {
+    // before / after → 成为 target 的同级
+    const target = elements.find((e) => e.id === targetId)
+    newParentId = target?.parentId
+
+    if (newParentId) {
+      const parentAbsPos = getAbsolutePosition(newParentId, elements)
+      newPosition = {
+        x: elAbsPos.x - parentAbsPos.x,
+        y: elAbsPos.y - parentAbsPos.y,
+      }
+    } else {
+      newPosition = elAbsPos
+    }
+
+    if (target) {
+      newZIndex = mode === 'before' ? target.zIndex + 1 : target.zIndex - 1
+    }
+  }
+
+  setCanvasElements(
+    elements.map((e) => {
+      if (e.id === elementId) {
+        return {
+          ...e,
+          parentId: newParentId,
+          position: newPosition,
+          zIndex: newZIndex !== undefined ? newZIndex : e.zIndex,
+        }
+      }
+      return e
+    }),
+  )
+
+  // 展开新父节点（若有）
+  if (newParentId) {
+    const expanded = getExpandedLayerIds()
+    if (!expanded.includes(newParentId)) {
+      setExpandedLayerIds([...expanded, newParentId])
+    }
+  }
+}
+
+// ───────── 内联重命名 atom ─────────
+const renamingLayerIdAtom = atom<string | null>(null)
+
+export const [
+  ,
+  useRenamingLayerId,
+  useRenamingLayerIdValue,
+  useSetRenamingLayerId,
+  getRenamingLayerId,
+  setRenamingLayerId,
+] = createAtomHooks(renamingLayerIdAtom)
+
+// ───────── 复制选中元素 ─────────
+export const duplicateSelectedElements = () => {
+  const elements = getCanvasElements()
+  const selected = getSelectedElements()
+  if (selected.length === 0) return
+
+  const OFFSET = 10
+  const newElements: CanvasElement[] = selected.map((el) => ({
+    ...el,
+    id: nanoid(),
+    position: { x: el.position.x + OFFSET, y: el.position.y + OFFSET },
+    zIndex: Math.max(...elements.map((e) => e.zIndex)) + 1,
+    parentId: undefined, // 复制后脱离组
+  }))
+
+  setCanvasElements([...elements, ...newElements])
+  setSelectedElementIds(newElements.map((el) => el.id))
+}
+
+// ───────── 翻转选中元素 ─────────
+export const flipSelectedElements = (direction: 'horizontal' | 'vertical') => {
+  const elements = getCanvasElements()
+  const selectedIds = getSelectedElements().map((el) => el.id)
+  if (selectedIds.length === 0) return
+
+  const updated = elements.map((el) => {
+    if (!selectedIds.includes(el.id)) return el
+    const flipKey = direction === 'horizontal' ? '_flipX' : '_flipY'
+    return {
+      ...el,
+      props: { ...el.props, [flipKey]: !el.props[flipKey] },
+    }
+  })
+
+  setCanvasElements(updated)
+}
+
+// ───────── 位置/尺寸对齐为整数 ─────────
+const roundSize = (v: unknown): unknown => {
+  if (typeof v === 'number') return Math.round(v)
+  if (typeof v === 'string' && v.endsWith('px')) {
+    return `${Math.round(Number.parseFloat(v))}px`
+  }
+  return v
+}
+
+export const alignSelectedToInteger = (
+  target: 'position' | 'size' | 'both' = 'both',
+) => {
+  const elements = getCanvasElements()
+  const selectedIds = getSelectedElements().map((el) => el.id)
+  if (selectedIds.length === 0) return
+
+  const updated = elements.map((el) => {
+    if (!selectedIds.includes(el.id)) return el
+
+    const pos =
+      target !== 'size'
+        ? {
+            x: Math.round(el.position.x),
+            y: Math.round(el.position.y),
+          }
+        : el.position
+
+    const newProps = { ...el.props }
+    if (target !== 'position') {
+      if (newProps.style) {
+        newProps.style = {
+          ...newProps.style,
+          width: roundSize(newProps.style.width),
+          height: roundSize(newProps.style.height),
+        }
+      }
+      if ('width' in newProps) newProps.width = roundSize(newProps.width)
+      if ('height' in newProps) newProps.height = roundSize(newProps.height)
+    }
+
+    return { ...el, position: pos, props: newProps }
+  })
+
+  setCanvasElements(updated)
+}
+
+// ───────── 批量切换选中元素的显示/隐藏 ─────────
+export const toggleSelectedElementsVisibility = () => {
+  const elements = getCanvasElements()
+  const selected = getSelectedElements()
+  if (selected.length === 0) return
+
+  // 若全部可见则全部隐藏，否则全部显示
+  const allVisible = selected.every((el) => el.props?.visible !== false)
+  const updated = elements.map((el) => {
+    if (!selected.find((s) => s.id === el.id)) return el
+    return { ...el, props: { ...el.props, visible: !allVisible } }
+  })
+
+  setCanvasElements(updated)
+}
+
+// ───────── 批量切换选中元素的锁定状态 ─────────
+// 锁定多个元素：先编组再锁定该组
+// 解锁：若目标是一个锁定的组则解组，否则直接解锁
+export const toggleSelectedElementsLock = () => {
+  const elements = getCanvasElements()
+  const selected = getSelectedElements()
+  if (selected.length === 0) return
+
+  const allLocked = selected.every((el) => el.props?.locked === true)
+
+  if (allLocked) {
+    // 解锁：若单个选中元素是 group 类型则解组，否则直接解锁
+    if (selected.length === 1 && selected[0].type === 'group') {
+      ungroupElements(selected[0].id)
+    } else {
+      const updated = elements.map((el) => {
+        if (!selected.find((s) => s.id === el.id)) return el
+        return { ...el, props: { ...el.props, locked: false } }
+      })
+      setCanvasElements(updated)
+    }
+  } else if (selected.length > 1) {
+    // 多个元素 → 编组后锁定该组
+    const selectedIds = selected.map((el) => el.id)
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    selectedIds.forEach((id) => {
+      const el = elements.find((e) => e.id === id)
+      if (!el) return
+      let w = el.props.width || (el.props.style && el.props.style.width) || 200
+      let h = el.props.height || (el.props.style && el.props.style.height) || 50
+      if (typeof w === 'string' && w.endsWith('px')) w = Number.parseInt(w, 10)
+      else if (w === 'auto') w = 200
+      if (typeof h === 'string' && h.endsWith('px')) h = Number.parseInt(h, 10)
+      else if (h === 'auto') h = 50
+      minX = Math.min(minX, el.position.x)
+      minY = Math.min(minY, el.position.y)
+      maxX = Math.max(maxX, el.position.x + Number(w))
+      maxY = Math.max(maxY, el.position.y + Number(h))
+    })
+
+    const groupWidth = maxX - minX
+    const groupHeight = maxY - minY
+    const groupId = nanoid()
+
+    const groupElement: CanvasElement = {
+      id: groupId,
+      type: 'group',
+      position: { x: minX, y: minY },
+      zIndex:
+        Math.max(
+          ...selectedIds.map(
+            (id) => elements.find((e) => e.id === id)?.zIndex || 0,
+          ),
+        ) + 1,
+      props: {
+        label: '组',
+        width: groupWidth,
+        height: groupHeight,
+        locked: true,
+        style: {
+          width: groupWidth,
+          height: groupHeight,
+          border: '2px dashed #3b82f6',
+          backgroundColor: 'transparent',
+        },
+      },
+    }
+
+    const updatedElements = elements.map((el) => {
+      if (selectedIds.includes(el.id)) {
+        return {
+          ...el,
+          parentId: groupId,
+          position: { x: el.position.x - minX, y: el.position.y - minY },
+        }
+      }
+      return el
+    })
+    updatedElements.push(groupElement)
+
+    setCanvasElements(updatedElements)
+    setSelectedElementIds([groupId])
+
+    // 自动展开新组
+    const expanded = getExpandedLayerIds()
+    if (!expanded.includes(groupId)) {
+      setExpandedLayerIds([...expanded, groupId])
+    }
+  } else {
+    // 单个元素：直接切换锁定状态
+    const updated = elements.map((el) => {
+      if (!selected.find((s) => s.id === el.id)) return el
+      return { ...el, props: { ...el.props, locked: !allLocked } }
+    })
+    setCanvasElements(updated)
+  }
+}
+
+// ───────── 重命名图层（修改 props.label）─────────
+export const renameLayer = (id: string, newName: string) => {
+  updateElementProps(id, { label: newName })
 }

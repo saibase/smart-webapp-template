@@ -811,10 +811,19 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
       handleContextMenu(e)
     }
 
+    // 翻转 transform（来自 props._flipX / _flipY）
+    const flipX = element.props?._flipX ? 'scaleX(-1)' : ''
+    const flipY = element.props?._flipY ? 'scaleY(-1)' : ''
+    const flipTransform = [flipX, flipY].filter(Boolean).join(' ') || undefined
+
+    const isLocked = element.props?.locked === true
+
     return (
       <m.div
         key={element.id}
-        drag={toolMode === 'select' && !isResizing && !element.parentId}
+        drag={
+          toolMode === 'select' && !isResizing && !element.parentId && !isLocked
+        }
         dragMomentum={false}
         onDragEnd={(_event, info) =>
           handleElementDragEnd(element.id, element, _event, info)
@@ -829,111 +838,118 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           top: currentY,
           zIndex: element.zIndex,
           boxShadow: isSelected ? '0 0 0 2px #3b82f6' : 'none',
-          pointerEvents: toolMode === 'pan' ? 'none' : 'auto',
+          pointerEvents: toolMode === 'pan' || isLocked ? 'none' : 'auto',
+          transform: flipTransform,
+          cursor: isLocked ? 'not-allowed' : undefined,
         }}
         className="outline-none"
         onContextMenu={handleContextMenuLocal}
+        onMouseDown={(e) => {
+          // 阻止冒泡：防止在元素上按下时触发画布背景的框选逻辑
+          e.stopPropagation()
+        }}
       >
         <Component {...element.props} />
-        {/* 渲染子元素相对组定位 */}
-        {childElements.map((child) =>
-          renderElement(child, element.position.x, element.position.y),
-        )}
+        {/* 子元素在父容器内渲染，传入 (0,0) 使其相对父容器定位 */}
+        {childElements.map((child) => renderElement(child, 0, 0))}
         {/* 拖拽调整控制点 - 仅选中时显示，只有顶级元素才有控制点 */}
-        {isSelected && toolMode === 'select' && !element.parentId && (
-          <>
-            {/* 四个角控制点 */}
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                top: -6,
-                left: -6,
-                cursor: `${getCursorForHandle('top-left')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'top-left', e, element)
-              }
-            />
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                top: -6,
-                right: -6,
-                cursor: `${getCursorForHandle('top-right')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'top-right', e, element)
-              }
-            />
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                bottom: -6,
-                left: -6,
-                cursor: `${getCursorForHandle('bottom-left')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'bottom-left', e, element)
-              }
-            />
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                bottom: -6,
-                right: -6,
-                cursor: `${getCursorForHandle('bottom-right')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'bottom-right', e, element)
-              }
-            />
-            {/* 四个边中点控制点 */}
-            <div
-              className="absolute h-3 w-3 bg-blue-500 border border-white"
-              style={{
-                top: -6,
-                left: elementWidth / 2 - 4,
-                cursor: `${getCursorForHandle('top')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'top', e, element)
-              }
-            />
-            <div
-              className="absolute h-3 w-3 bg-blue-500 border border-white"
-              style={{
-                bottom: -6,
-                left: elementWidth / 2 - 4,
-                cursor: `${getCursorForHandle('bottom')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'bottom', e, element)
-              }
-            />
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                left: -6,
-                top: elementHeight / 2 - 4,
-                cursor: `${getCursorForHandle('left')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'left', e, element)
-              }
-            />
-            <div
-              className="absolute w-3 h-3 bg-blue-500 border border-white"
-              style={{
-                right: -6,
-                top: elementHeight / 2 - 4,
-                cursor: `${getCursorForHandle('right')}`,
-              }}
-              onMouseDown={(e) =>
-                handleResizeStart(element.id, 'right', e, element)
-              }
-            />
-          </>
-        )}
+        {isSelected &&
+          toolMode === 'select' &&
+          !element.parentId &&
+          !isLocked && (
+            <>
+              {/* 四个角控制点 */}
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  top: -6,
+                  left: -6,
+                  cursor: `${getCursorForHandle('top-left')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'top-left', e, element)
+                }
+              />
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  top: -6,
+                  right: -6,
+                  cursor: `${getCursorForHandle('top-right')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'top-right', e, element)
+                }
+              />
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  bottom: -6,
+                  left: -6,
+                  cursor: `${getCursorForHandle('bottom-left')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'bottom-left', e, element)
+                }
+              />
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  bottom: -6,
+                  right: -6,
+                  cursor: `${getCursorForHandle('bottom-right')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'bottom-right', e, element)
+                }
+              />
+              {/* 四个边中点控制点 */}
+              <div
+                className="absolute h-3 w-3 bg-blue-500 border border-white"
+                style={{
+                  top: -6,
+                  left: elementWidth / 2 - 4,
+                  cursor: `${getCursorForHandle('top')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'top', e, element)
+                }
+              />
+              <div
+                className="absolute h-3 w-3 bg-blue-500 border border-white"
+                style={{
+                  bottom: -6,
+                  left: elementWidth / 2 - 4,
+                  cursor: `${getCursorForHandle('bottom')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'bottom', e, element)
+                }
+              />
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  left: -6,
+                  top: elementHeight / 2 - 4,
+                  cursor: `${getCursorForHandle('left')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'left', e, element)
+                }
+              />
+              <div
+                className="absolute w-3 h-3 bg-blue-500 border border-white"
+                style={{
+                  right: -6,
+                  top: elementHeight / 2 - 4,
+                  cursor: `${getCursorForHandle('right')}`,
+                }}
+                onMouseDown={(e) =>
+                  handleResizeStart(element.id, 'right', e, element)
+                }
+              />
+            </>
+          )}
       </m.div>
     )
   }
@@ -1142,6 +1158,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
         >
           {/* 层级操作 */}
           <button
+            type="button"
             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
             onClick={() => {
               changeSelectedElementsZIndex('up')
@@ -1151,6 +1168,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
             上移一层
           </button>
           <button
+            type="button"
             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
             onClick={() => {
               changeSelectedElementsZIndex('down')
@@ -1160,6 +1178,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
             下移一层
           </button>
           <button
+            type="button"
             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
             onClick={() => {
               changeSelectedElementsZIndex('top')
@@ -1169,6 +1188,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
             移到顶层
           </button>
           <button
+            type="button"
             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
             onClick={() => {
               changeSelectedElementsZIndex('bottom')
@@ -1181,6 +1201,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           {/* 编组操作 - 只在多选时可用 */}
           {contextMenu.selectedIds.length > 1 && (
             <button
+              type="button"
               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
               onClick={() => {
                 groupSelectedElements()
@@ -1198,6 +1219,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
               if (selectedEl && selectedEl.type === 'group') {
                 return (
                   <button
+                    type="button"
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
                     onClick={() => {
                       ungroupElements(selectedId)
