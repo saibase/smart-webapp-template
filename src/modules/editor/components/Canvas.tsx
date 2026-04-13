@@ -720,6 +720,9 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
   // 递归渲染元素，如果元素是组则渲染子元素相对位置
   const renderElement = (element: CanvasElement, parentX = 0, parentY = 0) => {
+    // 图层隐藏：跳过渲染
+    if (element.props?.visible === false) return null
+
     const componentMeta = getComponentById(element.type)
     if (!componentMeta) return null
 

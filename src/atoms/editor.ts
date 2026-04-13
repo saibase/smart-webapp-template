@@ -3,6 +3,21 @@ import { nanoid } from 'nanoid'
 
 import { createAtomHooks } from '~/lib/jotai'
 
+// ───────── 左侧面板 Tab ─────────
+export type LeftPanelTab = 'layers' | 'resources'
+const leftPanelTabAtom = atom<LeftPanelTab>('layers')
+
+// ───────── 资源面板子 Tab ─────────
+export type ResourceTab = 'components' | 'images' | 'icons' | 'text'
+const resourceTabAtom = atom<ResourceTab>('components')
+
+// ───────── 图层树展开节点 ─────────
+const expandedLayerIdsAtom = atom<string[]>([])
+
+// ───────── 图层搜索 ─────────
+const layerSearchQueryAtom = atom<string>('')
+const layerSearchVisibleAtom = atom<boolean>(false)
+
 // 画布元素类型定义
 export type CanvasElementPosition = {
   x: number
@@ -379,6 +394,52 @@ export const groupSelectedElements = () => {
   setCanvasElements(updatedElements)
   setSelectedElementIds([groupId])
 }
+
+// ───────── 左侧面板 hooks ─────────
+export const [
+  ,
+  useLeftPanelTab,
+  useLeftPanelTabValue,
+  useSetLeftPanelTab,
+  getLeftPanelTab,
+  setLeftPanelTab,
+] = createAtomHooks(leftPanelTabAtom)
+
+export const [
+  ,
+  useResourceTab,
+  useResourceTabValue,
+  useSetResourceTab,
+  getResourceTab,
+  setResourceTab,
+] = createAtomHooks(resourceTabAtom)
+
+export const [
+  ,
+  useExpandedLayerIds,
+  useExpandedLayerIdsValue,
+  useSetExpandedLayerIds,
+  getExpandedLayerIds,
+  setExpandedLayerIds,
+] = createAtomHooks(expandedLayerIdsAtom)
+
+export const [
+  ,
+  useLayerSearchQuery,
+  useLayerSearchQueryValue,
+  useSetLayerSearchQuery,
+  getLayerSearchQuery,
+  setLayerSearchQuery,
+] = createAtomHooks(layerSearchQueryAtom)
+
+export const [
+  ,
+  useLayerSearchVisible,
+  useLayerSearchVisibleValue,
+  useSetLayerSearchVisible,
+  getLayerSearchVisible,
+  setLayerSearchVisible,
+] = createAtomHooks(layerSearchVisibleAtom)
 
 // 解组 - 解散组，子元素恢复独立
 export const ungroupElements = (groupId: string) => {

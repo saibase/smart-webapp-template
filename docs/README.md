@@ -4,6 +4,21 @@ Welcome to the Vite React TailwindCSS Template documentation. This collection of
 
 ## 📚 Documentation Overview
 
+### [🗂️ Left Panel Area Spec](./LEFT_PANEL.md)
+
+**左侧面板区域划分开发文档**
+
+- 整体区域总览（6 个子区域 ASCII 图）
+- 面包屑 + 图层/资源 Tab 切换
+- 图层工具栏（搜索/视图/新增/折叠）
+- 页面结构分组栏
+- 图层搜索框
+- 图层树主列表（BODY-xxx / 排行榜 / 金币中心 等真实业务图层）
+- 资源面板（组件/图片/图标/文本）
+- 状态管理扩展方案、样式规范、交互流程
+
+---
+
 ### [🚀 User Guide](./USER_GUIDE.md)
 
 **Start here for your first application**

@@ -4,8 +4,8 @@ import { useEffect } from 'react'
 import { useSetToolMode } from '~/atoms/editor'
 
 import { Canvas } from './components/Canvas'
-import { ComponentPanel } from './components/ComponentPanel'
 import { DeviceToolbar } from './components/DeviceToolbar'
+import { LeftPanel } from './components/LeftPanel'
 import { PropsPanel } from './components/PropsPanel'
 
 export const VisualEditor: React.FC = () => {
@@ -45,8 +45,8 @@ export const VisualEditor: React.FC = () => {
         <Canvas />
       </div>
 
-      {/* 左侧组件面板 - 浮动在画布上方 */}
-      <ComponentPanel />
+      {/* 左侧面板 - 图层 / 资源双模块 */}
+      <LeftPanel />
 
       {/* 右侧属性面板 - 浮动在画布上方 */}
       <PropsPanel />
