@@ -2,7 +2,7 @@ import type { PanInfo } from 'motion/react'
 import { m } from 'motion/react'
 import { nanoid } from 'nanoid'
 import * as React from 'react'
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect,useRef } from 'react'
 
 import type { CanvasElement } from '~/atoms/editor'
 import {
@@ -48,6 +48,10 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
   const isBoxSelectingRef = useRef(false)
   // 多选批量拖拽时的实时偏移
   const [multiDragOffset, setMultiDragOffset] = React.useState({ x: 0, y: 0 })
+  // 剪贴板 - 保存复制的元素数据
+  const [copiedElements, setCopiedElements] = React.useState<
+    CanvasElement[] | null
+  >(null)
 
   // 处理画布整体平移 - 长按背景拖拽
   const handleCanvasPan = (_: unknown, info: PanInfo) => {
@@ -318,6 +322,91 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     // 重置实时偏移
     setMultiDragOffset({ x: 0, y: 0 })
   }
+
+  // 处理键盘快捷键 - 删除、复制、粘贴
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      // Delete/Backspace 删除选中元素
+      if (
+        selectedIds.length > 0 &&
+        (e.key === 'Delete' || e.key === 'Backspace')
+      ) {
+        e.preventDefault()
+        const currentElements = getCanvasElements()
+        const remainingElements = currentElements.filter(
+          (el) => !selectedIds.includes(el.id),
+        )
+        setCanvasElements(remainingElements)
+        setSelectedIds([])
+        return
+      }
+
+      // Ctrl+C / Cmd+C 复制选中元素到剪贴板
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault()
+        if (selectedIds.length === 0) return
+
+        const currentElements = getCanvasElements()
+        const elementsToCopy = currentElements.filter((el) =>
+          selectedIds.includes(el.id),
+        )
+
+        if (elementsToCopy.length === 0) return
+
+        // 保存到内部剪贴板
+        setCopiedElements(elementsToCopy)
+        return
+      }
+
+      // Ctrl+V / Cmd+V 粘贴剪贴板中的元素
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault()
+        if (!copiedElements || copiedElements.length === 0) return
+
+        const currentElements = getCanvasElements()
+        // 计算当前画布最大z-index
+        let maxZ = 0
+        currentElements.forEach((el) => {
+          if (el.zIndex > maxZ) maxZ = el.zIndex
+        })
+
+        // 每次粘贴偏移 20px，避免重叠
+        const offsetX = 20
+        const offsetY = 20
+
+        // 粘贴每个元素，生成新id
+        const pastedElements: CanvasElement[] = copiedElements.map(
+          (el, index) => {
+            const newId = nanoid()
+            return {
+              ...el,
+              id: newId,
+              position: {
+                x: el.position.x + offsetX,
+                y: el.position.y + offsetY,
+              },
+              zIndex: maxZ + index + 1,
+            }
+          },
+        )
+
+        const newElements = [...currentElements, ...pastedElements]
+        setCanvasElements(newElements)
+        // 选中新粘贴的元素
+        setSelectedIds(pastedElements.map((el) => el.id))
+        return
+      }
+    },
+    [selectedIds, setCanvasElements, setSelectedIds, copiedElements],
+  )
+
+  // 添加键盘事件监听
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleKeyDown])
 
   const renderElement = (element: CanvasElement) => {
     const componentMeta = getComponentById(element.type)

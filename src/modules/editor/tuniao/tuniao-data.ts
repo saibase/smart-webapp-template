@@ -648,18 +648,18 @@ export const tuniaoComponents: TuniaoComponentMeta[] = [
     popularity: 9,
     props: [
       {
-        name: 'url',
+        name: 'src',
         type: 'string',
         description: '头像图片地址',
         required: false,
-        default: null,
+        default: '',
       },
       {
-        name: 'icon',
+        name: 'text',
         type: 'string',
-        description: '头像图标',
+        description: '头像文字',
         required: false,
-        default: null,
+        default: '',
       },
       {
         name: 'shape',
