@@ -13,9 +13,9 @@ import {
 } from '~/atoms/editor'
 
 import { Canvas } from './components/Canvas'
-import { DeviceToolbar } from './components/DeviceToolbar'
 import { LeftPanel } from './components/LeftPanel'
 import { PropsPanel } from './components/PropsPanel'
+import { TopBar } from './components/TopBar'
 
 export const VisualEditor: React.FC = () => {
   const setToolMode = useSetToolMode()
@@ -126,16 +126,18 @@ export const VisualEditor: React.FC = () => {
 
   return (
     <div className="relative w-full h-screen bg-bg overflow-hidden">
-      {/* 画布占满整个屏幕，放在最底层 */}
-      <div className="absolute inset-0">
-        <DeviceToolbar />
+      {/* 顶部操作栏（h-11 = 44px，z-[70]）*/}
+      <TopBar />
+
+      {/* 画布（顶部留出 84px 给 TopBar 双行）*/}
+      <div className="absolute inset-0 pt-[84px]">
         <Canvas />
       </div>
 
-      {/* 左侧面板 - 图层 / 资源双模块 */}
+      {/* 左侧面板（top-[84px] 紧贴 TopBar 下方）*/}
       <LeftPanel />
 
-      {/* 右侧属性面板 - 浮动在画布上方 */}
+      {/* 右侧属性面板 */}
       <PropsPanel />
     </div>
   )

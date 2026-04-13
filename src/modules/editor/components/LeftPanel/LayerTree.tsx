@@ -9,7 +9,14 @@
  *     后 30% 区域 → 插入为同级（after）
  */
 import * as React from 'react'
-import { createContext, useCallback, useRef, useState } from 'react'
+import {
+  createContext,
+  use,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import type { CanvasElement } from '~/atoms/editor'
 import {
@@ -533,15 +540,26 @@ export const LayerTree: React.FC = () => {
     [draggedId, dropInfo],
   )
 
-  const dragCtx: DragContextType = {
-    draggedId,
-    dropInfo,
-    onDragStart,
-    onDragEnd,
-    onDragOver,
-    onDragLeave,
-    onDrop,
-  }
+  const dragCtx: DragContextType = useMemo(
+    () => ({
+      draggedId,
+      dropInfo,
+      onDragStart,
+      onDragEnd,
+      onDragOver,
+      onDragLeave,
+      onDrop,
+    }),
+    [
+      draggedId,
+      dropInfo,
+      onDragStart,
+      onDragEnd,
+      onDragOver,
+      onDragLeave,
+      onDrop,
+    ],
+  )
 
   // ── 树形数据 ──
   const rootElements = elements

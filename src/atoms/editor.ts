@@ -97,10 +97,21 @@ const canvasOffsetAtom = atom<CanvasOffset>({
 const dragPreviewAtom = atom<DragPreview>(null)
 
 // 编辑器工具模式
-export type ToolMode = 'select' | 'pan'
+export type ToolMode =
+  | 'select'
+  | 'pan'
+  | 'rect'
+  | 'text'
+  | 'pen'
+  | 'ellipse'
+  | 'mask'
 
 // 当前工具模式
 const toolModeAtom = atom<ToolMode>('select')
+
+// 工作流标签
+export type EditorWorkflow = 'design' | 'prototype' | 'annotation'
+const editorWorkflowAtom = atom<EditorWorkflow>('design')
 
 // 框选区域（鼠标框选多个元素）
 const selectionBoxAtom = atom<SelectionBox>(null)
@@ -808,4 +819,120 @@ export const toggleSelectedElementsLock = () => {
 // ───────── 重命名图层（修改 props.label）─────────
 export const renameLayer = (id: string, newName: string) => {
   updateElementProps(id, { label: newName })
+}
+
+// ───────── 工作流标签 hooks ─────────
+export const [
+  ,
+  useEditorWorkflow,
+  useEditorWorkflowValue,
+  useSetEditorWorkflow,
+  getEditorWorkflow,
+  setEditorWorkflow,
+] = createAtomHooks(editorWorkflowAtom)
+
+// ───────── 对齐操作 ─────────
+export type AlignType =
+  | 'left'
+  | 'hCenter'
+  | 'right'
+  | 'top'
+  | 'vCenter'
+  | 'bottom'
+  | 'hDistribute'
+  | 'vDistribute'
+
+// 提取元素数值尺寸
+const getElemSize = (el: CanvasElement) => {
+  let w: unknown = el.props.style?.width ?? el.props.width ?? 200
+  let h: unknown = el.props.style?.height ?? el.props.height ?? 50
+  if (typeof w === 'string')
+    w = w.endsWith('px')
+      ? Number.parseFloat(w)
+      : w === 'auto'
+        ? 200
+        : Number.parseFloat(w) || 200
+  if (typeof h === 'string')
+    h = h.endsWith('px')
+      ? Number.parseFloat(h)
+      : h === 'auto'
+        ? 50
+        : Number.parseFloat(h) || 50
+  return { w: Number(w), h: Number(h) }
+}
+
+export const alignSelectedElements = (type: AlignType) => {
+  const elements = getCanvasElements()
+  const selected = getSelectedElements()
+  if (selected.length < 2) return
+
+  const boxes = selected.map((el) => {
+    const { w, h } = getElemSize(el)
+    return { id: el.id, x: el.position.x, y: el.position.y, w, h }
+  })
+
+  const minX = Math.min(...boxes.map((b) => b.x))
+  const maxX = Math.max(...boxes.map((b) => b.x + b.w))
+  const minY = Math.min(...boxes.map((b) => b.y))
+  const maxY = Math.max(...boxes.map((b) => b.y + b.h))
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+
+  const updates: Record<string, { x: number; y: number }> = {}
+
+  switch (type) {
+    case 'left': {
+      for (const b of boxes) updates[b.id] = { x: minX, y: b.y }
+      break
+    }
+    case 'hCenter': {
+      for (const b of boxes) updates[b.id] = { x: cx - b.w / 2, y: b.y }
+      break
+    }
+    case 'right': {
+      for (const b of boxes) updates[b.id] = { x: maxX - b.w, y: b.y }
+      break
+    }
+    case 'top': {
+      for (const b of boxes) updates[b.id] = { x: b.x, y: minY }
+      break
+    }
+    case 'vCenter': {
+      for (const b of boxes) updates[b.id] = { x: b.x, y: cy - b.h / 2 }
+      break
+    }
+    case 'bottom': {
+      for (const b of boxes) updates[b.id] = { x: b.x, y: maxY - b.h }
+      break
+    }
+    case 'hDistribute': {
+      const sorted = [...boxes].sort((a, b) => a.x - b.x)
+      const totalW = sorted.reduce((s, b) => s + b.w, 0)
+      const gap = (maxX - minX - totalW) / (sorted.length - 1)
+      let curX = minX
+      for (const b of sorted) {
+        updates[b.id] = { x: curX, y: b.y }
+        curX += b.w + gap
+      }
+      break
+    }
+    case 'vDistribute': {
+      const sorted = [...boxes].sort((a, b) => a.y - b.y)
+      const totalH = sorted.reduce((s, b) => s + b.h, 0)
+      const gap = (maxY - minY - totalH) / (sorted.length - 1)
+      let curY = minY
+      for (const b of sorted) {
+        updates[b.id] = { x: b.x, y: curY }
+        curY += b.h + gap
+      }
+      break
+    }
+  }
+
+  setCanvasElements(
+    elements.map((el) => {
+      const upd = updates[el.id]
+      return upd ? { ...el, position: upd } : el
+    }),
+  )
 }
