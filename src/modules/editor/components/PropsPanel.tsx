@@ -970,6 +970,129 @@ const ExportPanel: React.FC<{ element: CanvasElement }> = ({ element }) => {
 }
 
 // ─────────────────────────────────────────────────────────
+// 0. 文本内容面板（仅 text / heading 类型）
+// ─────────────────────────────────────────────────────────
+const TEXT_TYPES = new Set(['text', 'heading'])
+const FONT_WEIGHTS = [
+  { value: '400', label: '常规' },
+  { value: '600', label: '半粗' },
+  { value: '700', label: '粗体' },
+]
+const ALIGN_OPTIONS = [
+  { value: 'left', icon: 'M3 6h18M3 12h12M3 18h15' },
+  { value: 'center', icon: 'M3 6h18M6 12h12M4.5 18h15' },
+  { value: 'right', icon: 'M3 6h18M9 12h12M6 18h15' },
+]
+
+const TextPanel: React.FC<{ element: CanvasElement }> = ({ element }) => {
+  const content = String(element.props.content ?? element.props.text ?? '')
+  const fontSize = toNum(element.props.style?.fontSize, 16)
+  const fontColor = element.props.style?.color ?? '#333333'
+  const fontWeight = String(element.props.style?.fontWeight ?? '400')
+  const textAlign = element.props.style?.textAlign ?? 'left'
+
+  const [localContent, setLocalContent] = useState(content)
+
+  useEffect(() => {
+    setLocalContent(content)
+  }, [content])
+
+  const commitContent = () => {
+    if (localContent !== content) {
+      updateElementProps(element.id, {
+        content: localContent,
+        text: localContent,
+      })
+    }
+  }
+
+  const updateStyle = (patch: Record<string, unknown>) =>
+    updateElementProps(element.id, {
+      style: { ...element.props.style, ...patch },
+    })
+
+  return (
+    <SectionHeader title="文本" collapsible defaultOpen>
+      <div className="px-3 pt-2 space-y-2">
+        {/* 内容编辑区 */}
+        <textarea
+          rows={3}
+          value={localContent}
+          onChange={(e) => setLocalContent(e.target.value)}
+          onBlur={commitContent}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.metaKey) commitContent()
+          }}
+          className="w-full text-xs text-text bg-fill-secondary border border-transparent focus:border-primary rounded px-2 py-1.5 outline-none resize-none transition-colors leading-relaxed"
+        />
+        {/* 字号 + 颜色 */}
+        <div className="grid grid-cols-2 gap-2">
+          <NumInput
+            label="字号"
+            value={fontSize}
+            min={1}
+            unit="px"
+            onChange={(v) => updateStyle({ fontSize: `${v}px` })}
+          />
+          <ColorInput
+            label="颜色"
+            value={fontColor}
+            onChange={(c) => updateStyle({ color: c })}
+          />
+        </div>
+        {/* 字重 */}
+        <div className="flex items-center gap-1">
+          {FONT_WEIGHTS.map((fw) => (
+            <button
+              key={fw.value}
+              type="button"
+              onClick={() => updateStyle({ fontWeight: fw.value })}
+              className={cn(
+                'flex-1 py-1 text-[11px] rounded transition-colors',
+                fontWeight === fw.value
+                  ? 'bg-primary text-white'
+                  : 'bg-fill-secondary text-text-secondary hover:bg-fill-tertiary',
+              )}
+            >
+              {fw.label}
+            </button>
+          ))}
+        </div>
+        {/* 对齐 */}
+        <div className="flex items-center gap-1">
+          {ALIGN_OPTIONS.map((a) => (
+            <button
+              key={a.value}
+              type="button"
+              title={a.value}
+              onClick={() => updateStyle({ textAlign: a.value })}
+              className={cn(
+                'flex-1 h-7 flex items-center justify-center rounded transition-colors',
+                textAlign === a.value
+                  ? 'bg-primary text-white'
+                  : 'bg-fill-secondary text-text-secondary hover:bg-fill-tertiary',
+              )}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d={a.icon} />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </div>
+    </SectionHeader>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
 // 主 PropsPanel
 // ─────────────────────────────────────────────────────────
 export const PropsPanel: React.FC<{ className?: string }> = ({ className }) => {
@@ -1049,6 +1172,9 @@ export const PropsPanel: React.FC<{ className?: string }> = ({ className }) => {
 
       {/* ── 章节内容 ───────────────────────────────── */}
       <div className="flex-1 min-h-0">
+        {/* 0. 文本内容（仅 text / heading 类型）*/}
+        {TEXT_TYPES.has(el.type) && <TextPanel element={el} />}
+
         {/* 1. 对齐 */}
         <AlignPanel count={count} />
 

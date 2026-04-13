@@ -15,6 +15,7 @@ import {
   groupSelectedElements,
   ungroupElements,
   updateElementPosition,
+  updateElementProps,
   useCanvasElementsValue,
   useCanvasOffsetValue,
   useDragPreviewValue,
@@ -25,6 +26,7 @@ import {
   useSetDragPreview,
   useSetSelectedElementIds,
   useSetSelectionBox,
+  useSetToolMode,
   useToolModeValue,
 } from '~/atoms/editor'
 import { cn } from '~/lib/cn'
@@ -81,13 +83,35 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
   const setDragPreview = useSetDragPreview()
   const canvasOffset = useCanvasOffsetValue()
   const toolMode = useToolModeValue()
+  const setToolMode = useSetToolMode()
   const selectionBox = useSelectionBoxValue()
   const setSelectionBox = useSetSelectionBox()
   const setCanvasElements = useSetCanvasElements()
   const containerRef = useRef<HTMLDivElement>(null)
   const isBoxSelectingRef = useRef(false)
+  const isDrawingRef = useRef(false)
+
+  // 绘制预览状态（容器坐标）
+  const [drawState, setDrawState] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+
+  // 绘制工具列表
+  const DRAW_TOOLS = ['rect', 'text', 'ellipse', 'mask'] as const
+  type DrawTool = (typeof DRAW_TOOLS)[number]
+  const isDrawTool = (m: string): m is DrawTool =>
+    (DRAW_TOOLS as readonly string[]).includes(m)
   // 多选批量拖拽时的实时偏移
   const [multiDragOffset, setMultiDragOffset] = React.useState({ x: 0, y: 0 })
+
+  // 内联文本编辑
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null)
+  const [inlineEditValue, setInlineEditValue] = useState('')
+  const inlineTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const TEXT_ELEMENT_TYPES = new Set(['text', 'heading'])
   // 剪贴板 - 保存复制的元素数据
   const [copiedElements, setCopiedElements] = React.useState<
     CanvasElement[] | null
@@ -226,64 +250,107 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
   // 处理多选包围框上的鼠标按下 - 已经在m.div上阻止了事件冒泡，这里不需要额外处理
 
-  // 开始框选 - 鼠标按下在画布背景
+  // 开始框选 / 开始绘制 - 鼠标按下在画布背景
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // 只响应鼠标左键 (button === 0)
       if (e.button !== 0) return
-
-      if (toolMode !== 'select') {
-        return
-      }
-
-      // 简化背景检查：只要不是元素本身就可以开始框选
-      // 实际上，我们可以允许在任何地方开始框选，因为用户可能想从元素上开始框选
-      // 但为了简单起见，我们先允许在任何地方开始
-      if (!containerRef.current) {
-        return
-      }
+      if (!containerRef.current) return
 
       const rect = containerRef.current.getBoundingClientRect()
-      // 鼠标在容器内的坐标，不需要减 canvasOffset，因为框选相对于容器绘制
       const startX = e.clientX - rect.left
       const startY = e.clientY - rect.top
 
-      isBoxSelectingRef.current = true
-      setSelectionBox({
-        startX,
-        startY,
-        currentX: startX,
-        currentY: startY,
-      })
+      if (isDrawTool(toolMode)) {
+        // 绘制模式：记录起点
+        isDrawingRef.current = true
+        setDrawState({ startX, startY, currentX: startX, currentY: startY })
+        e.stopPropagation()
+        return
+      }
 
-      // 阻止事件冒泡，避免触发其他点击事件
+      if (toolMode !== 'select') return
+
+      isBoxSelectingRef.current = true
+      setSelectionBox({ startX, startY, currentX: startX, currentY: startY })
       e.stopPropagation()
     },
-    [toolMode, setSelectionBox],
+    [toolMode, setSelectionBox, isDrawTool],
   )
 
-  // 更新框选区域大小 - 鼠标移动
+  // 更新框选 / 绘制预览 - 鼠标移动
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isBoxSelectingRef.current || !selectionBox || !containerRef.current)
-        return
-
+      if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
-      // 同样，鼠标在容器内的坐标，不需要减 canvasOffset
       const currentX = e.clientX - rect.left
       const currentY = e.clientY - rect.top
 
-      setSelectionBox({
-        ...selectionBox,
-        currentX,
-        currentY,
-      })
+      if (isDrawingRef.current && drawState) {
+        setDrawState({ ...drawState, currentX, currentY })
+        return
+      }
+
+      if (!isBoxSelectingRef.current || !selectionBox) return
+      setSelectionBox({ ...selectionBox, currentX, currentY })
     },
-    [selectionBox, setSelectionBox],
+    [selectionBox, setSelectionBox, drawState],
   )
 
-  // 结束框选 - 鼠标松开，选中所有在框内的元素
+  // 结束绘制 / 结束框选 - 鼠标松开
   const handleMouseUp = useCallback(() => {
+    // ── 绘制工具提交 ──────────────────────────────
+    if (isDrawingRef.current && drawState) {
+      isDrawingRef.current = false
+
+      const scaleFactor = scale / 100
+      const currentOffset = getCanvasOffset()
+
+      const x1 =
+        (Math.min(drawState.startX, drawState.currentX) - currentOffset.x) /
+        scaleFactor
+      const y1 =
+        (Math.min(drawState.startY, drawState.currentY) - currentOffset.y) /
+        scaleFactor
+      const w = Math.round(
+        Math.abs(drawState.currentX - drawState.startX) / scaleFactor,
+      )
+      const h = Math.round(
+        Math.abs(drawState.currentY - drawState.startY) / scaleFactor,
+      )
+
+      if (w > 4 && h > 4) {
+        const defaultProps: Record<string, unknown> =
+          toolMode === 'text'
+            ? {
+                content: '文本',
+                width: w,
+                height: h,
+                style: {
+                  fontSize: '16px',
+                  color: '#333333',
+                  width: w,
+                  height: h,
+                },
+              }
+            : { width: w, height: h }
+
+        const newEl: CanvasElement = {
+          id: nanoid(),
+          type: toolMode,
+          props: defaultProps,
+          position: { x: Math.round(x1), y: Math.round(y1) },
+          zIndex: getCanvasElements().length,
+        }
+        addCanvasElement(newEl)
+        setSelectedIds([newEl.id])
+      }
+
+      setDrawState(null)
+      setToolMode('select')
+      return
+    }
+
+    // ── 框选结束 ──────────────────────────────────
     if (!isBoxSelectingRef.current || !selectionBox) {
       isBoxSelectingRef.current = false
       setSelectionBox(null)
@@ -378,7 +445,15 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
     isBoxSelectingRef.current = false
     setSelectionBox(null)
-  }, [selectionBox, setSelectedIds, setSelectionBox])
+  }, [
+    selectionBox,
+    setSelectedIds,
+    setSelectionBox,
+    drawState,
+    scale,
+    toolMode,
+    setToolMode,
+  ])
 
   // 拖拽结束时使用增量计算元素的新位置
   const handleElementDragEnd = (
@@ -829,6 +904,16 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           handleElementDragEnd(element.id, element, _event, info)
         }
         onClick={handleClick}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          if (!TEXT_ELEMENT_TYPES.has(element.type)) return
+          const val = String(element.props.content ?? element.props.text ?? '')
+          setInlineEditId(element.id)
+          setInlineEditValue(val)
+          setTimeout(() => {
+            inlineTextareaRef.current?.select()
+          }, 0)
+        }}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={Spring.presets.smooth}
@@ -849,7 +934,57 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           e.stopPropagation()
         }}
       >
-        <Component {...element.props} />
+        {/* 内联文本编辑覆盖层 */}
+        {inlineEditId === element.id && (
+          <textarea
+            ref={inlineTextareaRef}
+            value={inlineEditValue}
+            onChange={(e) => setInlineEditValue(e.target.value)}
+            onBlur={() => {
+              updateElementProps(element.id, {
+                content: inlineEditValue,
+                text: inlineEditValue,
+              })
+              setInlineEditId(null)
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Escape') {
+                setInlineEditId(null)
+              } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                updateElementProps(element.id, {
+                  content: inlineEditValue,
+                  text: inlineEditValue,
+                })
+                setInlineEditId(null)
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              fontSize: element.props.style?.fontSize ?? '16px',
+              fontWeight: element.props.style?.fontWeight ?? 'normal',
+              color: '#1a1a1a',
+              textAlign:
+                (element.props.style
+                  ?.textAlign as React.CSSProperties['textAlign']) ?? 'left',
+              lineHeight: '1.5',
+              background: '#ffffff',
+              border: '2px solid #3b82f6',
+              borderRadius: 2,
+              padding: '2px 4px',
+              resize: 'none',
+              outline: 'none',
+              zIndex: 9999,
+              cursor: 'text',
+              boxSizing: 'border-box',
+            }}
+          />
+        )}
+        {inlineEditId !== element.id && <Component {...element.props} />}
         {/* 子元素在父容器内渲染，传入 (0,0) 使其相对父容器定位 */}
         {childElements.map((child) => renderElement(child, 0, 0))}
         {/* 拖拽调整控制点 - 仅选中时显示，只有顶级元素才有控制点 */}
@@ -1070,7 +1205,11 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           'absolute inset-0 transition-colors',
           toolMode === 'pan'
             ? 'cursor-grab active:cursor-grabbing'
-            : 'cursor-default',
+            : toolMode === 'text'
+              ? 'cursor-text'
+              : isDrawTool(toolMode)
+                ? 'cursor-crosshair'
+                : 'cursor-default',
         )}
         style={{
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
@@ -1133,6 +1272,23 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           />
         )}
       </m.div>
+
+      {/* 绘制预览矩形（容器坐标，不随画布偏移）*/}
+      {drawState && (
+        <div
+          className={cn(
+            'absolute pointer-events-none z-50 border-2 border-primary bg-primary/10',
+            toolMode === 'ellipse' && 'rounded-full',
+            toolMode === 'mask' && 'border-dashed rounded',
+          )}
+          style={{
+            left: Math.min(drawState.startX, drawState.currentX),
+            top: Math.min(drawState.startY, drawState.currentY),
+            width: Math.abs(drawState.currentX - drawState.startX),
+            height: Math.abs(drawState.currentY - drawState.startY),
+          }}
+        />
+      )}
 
       {/* 框选矩形 - 跟随鼠标拖拽，放在最外层不跟随画布偏移 */}
       {boxStyle && (

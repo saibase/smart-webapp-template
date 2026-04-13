@@ -4,7 +4,10 @@ import { useState } from 'react'
 import type { ResourceTab } from '~/atoms/editor'
 import { useResourceTabValue, useSetResourceTab } from '~/atoms/editor'
 import { cn } from '~/lib/cn'
-import type { ComponentMeta } from '~/modules/editor/registry'
+import type {
+  ComponentCategory,
+  ComponentMeta,
+} from '~/modules/editor/registry'
 import { fullComponentRegistry } from '~/modules/editor/registry'
 
 // ── 资源来源筛选 ─────────────────────────────────────
@@ -14,7 +17,19 @@ type SourceFilter = 'all' | 'local'
 const extLibraries = [
   { name: '线框图组件', icon: '▣' },
   { name: 'Ant Design', icon: '🐜' },
-  { name: 'MasterGo Design', icon: '✦' },
+  { name: 'SmartUi Design', icon: '✦' },
+]
+
+// ── 分类展示顺序 ─────────────────────────────────────
+const CATEGORY_ORDER: ComponentCategory[] = [
+  '基础',
+  '容器',
+  '导航',
+  '表单',
+  '反馈',
+  '展示',
+  '业务',
+  '其他',
 ]
 
 // ── 资源子 Tab 配置 ──────────────────────────────────
@@ -39,10 +54,10 @@ const ComponentCard: React.FC<{ meta: ComponentMeta }> = ({ meta }) => (
     title={meta.name}
     className="flex flex-col items-center gap-1 p-2 rounded border border-border hover:border-primary hover:bg-primary/5 cursor-move transition-colors"
   >
-    <div className="w-full h-10 rounded bg-fill-secondary flex items-center justify-center text-text-tertiary text-lg select-none">
+    <div className="w-full h-10 rounded bg-fill-secondary flex items-center justify-center text-text-tertiary select-none">
       <svg
-        width="20"
-        height="20"
+        width="18"
+        height="18"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -57,7 +72,57 @@ const ComponentCard: React.FC<{ meta: ComponentMeta }> = ({ meta }) => (
   </div>
 )
 
-// ── 占位内容（图片 / 图标 / 文本 Tab 暂未实现）────────
+// ── 分类区块（可折叠）───────────────────────────────
+const CategorySection: React.FC<{
+  category: ComponentCategory
+  components: ComponentMeta[]
+}> = ({ category, components }) => {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="mb-1">
+      {/* 分类标题 */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-1 py-1 text-[11px] font-medium text-text-secondary hover:text-text transition-colors"
+      >
+        <span className="flex items-center gap-1">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            style={{
+              transition: 'transform 0.15s',
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          {category}
+        </span>
+        <span className="text-[10px] text-text-tertiary">
+          {components.length}
+        </span>
+      </button>
+
+      {/* 组件卡片网格 */}
+      {open && (
+        <div className="grid grid-cols-2 gap-1.5 pb-1">
+          {components.map((meta) => (
+            <ComponentCard key={meta.id} meta={meta} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 占位内容 ─────────────────────────────────────────
 const PlaceholderContent: React.FC<{ label: string }> = ({ label }) => (
   <div className="flex flex-col items-center justify-center py-12 gap-2 text-text-tertiary">
     <svg
@@ -80,15 +145,20 @@ export const ResourcePanel: React.FC = () => {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // 过滤组件列表
-  const allComponents = fullComponentRegistry
-  const filteredComponents = allComponents.filter((c) => {
+  // 过滤并按分类分组
+  const filtered = fullComponentRegistry.filter((c) => {
     if (!searchQuery) return true
     return (
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.id.toLowerCase().includes(searchQuery.toLowerCase())
     )
   })
+
+  // 按 CATEGORY_ORDER 分组
+  const grouped = CATEGORY_ORDER.map((cat) => ({
+    category: cat,
+    components: filtered.filter((c) => c.category === cat),
+  })).filter((g) => g.components.length > 0)
 
   return (
     <div className="flex flex-col h-full">
@@ -161,6 +231,25 @@ export const ResourcePanel: React.FC = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 text-xs bg-transparent outline-none text-text placeholder:text-text-tertiary"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-text-tertiary hover:text-text transition-colors"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -168,15 +257,18 @@ export const ResourcePanel: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-3 pb-3">
         {activeTab === 'components' && (
           <>
-            <div className="grid grid-cols-2 gap-2">
-              {filteredComponents.map((meta) => (
-                <ComponentCard key={meta.id} meta={meta} />
-              ))}
-            </div>
-            {filteredComponents.length === 0 && (
+            {grouped.length === 0 ? (
               <div className="text-xs text-text-tertiary text-center py-8">
                 未找到匹配组件
               </div>
+            ) : (
+              grouped.map(({ category, components }) => (
+                <CategorySection
+                  key={category}
+                  category={category}
+                  components={components}
+                />
+              ))
             )}
           </>
         )}

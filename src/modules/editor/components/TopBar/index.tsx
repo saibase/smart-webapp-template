@@ -181,7 +181,7 @@ export const TopBar: React.FC = () => {
       </div>
 
       {/* ── 13 个工具按钮（绝对居中）── */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+      <div className="absolute left-1/2 -translate-x-1/2 inset-y-0 flex items-center gap-0.5">
         {TOOLS.map((tool, i) => {
           if (tool.type === 'sep') {
             return (
@@ -217,7 +217,7 @@ export const TopBar: React.FC = () => {
       <div className="flex-1" />
 
       {/* ── 工作流标签 + 缩放（距右边缘 20%）── */}
-      <div className="absolute right-[20%] flex items-center gap-2">
+      <div className="absolute right-[20%] inset-y-0 flex items-center gap-2">
         <div className="flex items-center rounded-lg border border-border overflow-hidden">
           {WORKFLOW_TABS.map((tab) => (
             <button

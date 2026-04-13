@@ -51,6 +51,61 @@ import { Heading } from './components/Heading'
 import { Input } from './components/Input'
 import { Text } from './components/Text'
 
+// ── 基础图形（绘制工具产出的原始形状）────────────────────
+const PrimitiveRect: React.FC<{
+  width?: number
+  height?: number
+  style?: React.CSSProperties
+}> = ({ width = 100, height = 100, style }) => (
+  <div
+    style={{
+      width,
+      height,
+      backgroundColor: '#e2e8f0',
+      border: '1px solid #94a3b8',
+      boxSizing: 'border-box',
+      ...style,
+    }}
+  />
+)
+
+const PrimitiveEllipse: React.FC<{
+  width?: number
+  height?: number
+  style?: React.CSSProperties
+}> = ({ width = 100, height = 100, style }) => (
+  <div
+    style={{
+      width,
+      height,
+      backgroundColor: '#e2e8f0',
+      border: '1px solid #94a3b8',
+      borderRadius: '50%',
+      boxSizing: 'border-box',
+      ...style,
+    }}
+  />
+)
+
+const PrimitiveMask: React.FC<{
+  width?: number
+  height?: number
+  style?: React.CSSProperties
+}> = ({ width = 100, height = 100, style }) => (
+  <div
+    style={{
+      width,
+      height,
+      border: '2px dashed #94a3b8',
+      borderRadius: 4,
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+      backgroundColor: 'transparent',
+      ...style,
+    }}
+  />
+)
+
 export type ComponentCategory =
   | '基础'
   | '容器'
@@ -71,6 +126,27 @@ export type ComponentMeta = {
 }
 
 export const componentRegistry: ComponentMeta[] = [
+  {
+    id: 'rect',
+    name: '矩形',
+    category: '基础',
+    defaultProps: { width: 100, height: 100 },
+    component: PrimitiveRect,
+  },
+  {
+    id: 'ellipse',
+    name: '椭圆',
+    category: '基础',
+    defaultProps: { width: 100, height: 100 },
+    component: PrimitiveEllipse,
+  },
+  {
+    id: 'mask',
+    name: '蒙版',
+    category: '基础',
+    defaultProps: { width: 100, height: 100 },
+    component: PrimitiveMask,
+  },
   {
     id: 'group',
     name: '编组',
