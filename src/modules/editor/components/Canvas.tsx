@@ -2,7 +2,7 @@ import type { PanInfo } from 'motion/react'
 import { m } from 'motion/react'
 import { nanoid } from 'nanoid'
 import * as React from 'react'
-import { useCallback, useEffect,useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CanvasElement } from '~/atoms/editor'
 import {
@@ -10,6 +10,7 @@ import {
   addCanvasOffset,
   clearDragPreview,
   getCanvasElements,
+  getCanvasOffset,
   updateElementPosition,
   useCanvasElementsValue,
   useCanvasOffsetValue,
@@ -27,6 +28,42 @@ import { cn } from '~/lib/cn'
 import { Spring } from '~/lib/spring'
 
 import { getComponentById } from '../registry'
+
+// 拖拽调整类型
+type ResizeHandle =
+  | 'top-left'
+  | 'top'
+  | 'top-right'
+  | 'left'
+  | 'right'
+  | 'bottom-left'
+  | 'bottom'
+  | 'bottom-right'
+
+// 获取控制点对应的光标样式
+const getCursorForHandle = (handle: ResizeHandle): string => {
+  switch (handle) {
+    case 'top-left':
+    case 'bottom-right': {
+      return 'nwse-resize'
+    }
+    case 'top':
+    case 'bottom': {
+      return 'ns-resize'
+    }
+    case 'top-right':
+    case 'bottom-left': {
+      return 'nesw-resize'
+    }
+    case 'left':
+    case 'right': {
+      return 'ew-resize'
+    }
+    default: {
+      return 'default'
+    }
+  }
+}
 
 type CanvasProps = {
   className?: string
@@ -52,6 +89,20 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
   const [copiedElements, setCopiedElements] = React.useState<
     CanvasElement[] | null
   >(null)
+
+  // 尺寸调整状态
+  const [resizing, setResizing] = useState<{
+    elementId: string
+    handle: ResizeHandle
+    startX: number
+    startY: number
+    startWidth: number
+    startHeight: number
+    startLeft: number
+    startTop: number
+  } | null>(null)
+
+  const isResizing = !!resizing
 
   // 处理画布整体平移 - 长按背景拖拽
   const handleCanvasPan = (_: unknown, info: PanInfo) => {
@@ -194,19 +245,26 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
     // 需要转换为画布坐标进行碰撞检测
     // selectionBox.startX 已经是容器坐标，减去 canvasOffset 得到画布坐标
+    const currentCanvasOffset = getCanvasOffset()
     const leftCanvas =
-      Math.min(selectionBox.startX, selectionBox.currentX) - canvasOffset.x
+      Math.min(selectionBox.startX, selectionBox.currentX) -
+      currentCanvasOffset.x
     const rightCanvas =
-      Math.max(selectionBox.startX, selectionBox.currentX) - canvasOffset.x
+      Math.max(selectionBox.startX, selectionBox.currentX) -
+      currentCanvasOffset.x
     const topCanvas =
-      Math.min(selectionBox.startY, selectionBox.currentY) - canvasOffset.y
+      Math.min(selectionBox.startY, selectionBox.currentY) -
+      currentCanvasOffset.y
     const bottomCanvas =
-      Math.max(selectionBox.startY, selectionBox.currentY) - canvasOffset.y
+      Math.max(selectionBox.startY, selectionBox.currentY) -
+      currentCanvasOffset.y
 
     // Find all elements that intersect with the selection box
     // Approximate: check if element's bounding box intersects
     const boxSelectedIds: string[] = []
-    elements.forEach((el) => {
+    // 使用 getCanvasElements 获取最新元素数组，而不是依赖闭包捕获的旧值
+    const currentElements = getCanvasElements()
+    currentElements.forEach((el) => {
       // For simplicity, use element position and assume some default size
       // TODO: Get actual bounding box from rendered elements
       // Get width/height from either top-level props or style
@@ -249,14 +307,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
     isBoxSelectingRef.current = false
     setSelectionBox(null)
-  }, [
-    selectionBox,
-    elements,
-    canvasOffset.x,
-    canvasOffset.y,
-    setSelectedIds,
-    setSelectionBox,
-  ])
+  }, [selectionBox, setSelectedIds, setSelectionBox])
 
   // 拖拽结束时使用增量计算元素的新位置
   const handleElementDragEnd = (
@@ -408,6 +459,194 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     }
   }, [handleKeyDown])
 
+  // 开始尺寸调整
+  const handleResizeStart = useCallback(
+    (
+      elementId: string,
+      handle: ResizeHandle,
+      e: React.MouseEvent,
+      element: CanvasElement,
+    ) => {
+      e.stopPropagation()
+      e.preventDefault()
+
+      // 获取元素当前尺寸
+      let width =
+        element.props.width ||
+        (element.props.style && element.props.style.width) ||
+        200
+      let height =
+        element.props.height ||
+        (element.props.style && element.props.style.height) ||
+        50
+
+      if (typeof width === 'string' && width.endsWith('px')) {
+        width = Number.parseInt(width, 10)
+      } else if (width === 'auto') {
+        width = 200
+      }
+
+      if (typeof height === 'string' && height.endsWith('px')) {
+        height = Number.parseInt(height, 10)
+      } else if (height === 'auto') {
+        height = 50
+      }
+
+      setResizing({
+        elementId,
+        handle,
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: Number(width),
+        startHeight: Number(height),
+        startLeft: element.position.x,
+        startTop: element.position.y,
+      })
+    },
+    [],
+  )
+
+  // 尺寸调整中
+  const handleResizeMove = useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      if (!resizing || !containerRef.current) return
+
+      const {
+        elementId,
+        handle,
+        startX,
+        startY,
+        startWidth,
+        startHeight,
+        startLeft,
+        startTop,
+      } = resizing
+
+      containerRef.current.getBoundingClientRect()
+      const scaleFactor = scale / 100
+
+      // 计算鼠标移动增量（屏幕像素 -> 画布坐标）
+      const deltaX = ('clientX' in e ? e.clientX : 0) - startX
+      const deltaY = ('clientY' in e ? e.clientY : 0) - startY
+      const scaledDeltaX = deltaX / scaleFactor
+      const scaledDeltaY = deltaY / scaleFactor
+
+      let newWidth = startWidth
+      let newHeight = startHeight
+      let newX = startLeft
+      let newY = startTop
+
+      // 根据不同的控制点计算新的宽高和位置
+      switch (handle) {
+        case 'right': {
+          newWidth = Math.max(20, startWidth + scaledDeltaX)
+          break
+        }
+        case 'left': {
+          newWidth = Math.max(20, startWidth - scaledDeltaX)
+          newX = startLeft + scaledDeltaX
+          break
+        }
+        case 'bottom': {
+          newHeight = Math.max(20, startHeight + scaledDeltaY)
+          break
+        }
+        case 'top': {
+          newHeight = Math.max(20, startHeight - scaledDeltaY)
+          newY = startTop + scaledDeltaY
+          break
+        }
+        case 'bottom-right': {
+          newWidth = Math.max(20, startWidth + scaledDeltaX)
+          newHeight = Math.max(20, startHeight + scaledDeltaY)
+          break
+        }
+        case 'bottom-left': {
+          newWidth = Math.max(20, startWidth - scaledDeltaX)
+          newHeight = Math.max(20, startHeight + scaledDeltaY)
+          newX = startLeft + scaledDeltaX
+          break
+        }
+        case 'top-right': {
+          newWidth = Math.max(20, startWidth + scaledDeltaX)
+          newHeight = Math.max(20, startHeight - scaledDeltaY)
+          newY = startTop + scaledDeltaY
+          break
+        }
+        case 'top-left': {
+          newWidth = Math.max(20, startWidth - scaledDeltaX)
+          newHeight = Math.max(20, startHeight - scaledDeltaY)
+          newX = startLeft + scaledDeltaX
+          newY = startTop + scaledDeltaY
+          break
+        }
+      }
+
+      // 更新元素尺寸和位置
+      const currentElements = getCanvasElements()
+      const updatedElements = currentElements.map((el) => {
+        if (el.id === elementId) {
+          // 优先更新style中的尺寸，如果width/height在props顶层也更新
+          const newProps = { ...el.props }
+
+          // 更新style
+          if (newProps.style) {
+            newProps.style = {
+              ...newProps.style,
+              width: newWidth,
+              height: newHeight,
+            }
+          } else {
+            newProps.style = { width: newWidth, height: newHeight }
+          }
+
+          // 如果顶层有width/height也更新
+          if ('width' in newProps) {
+            newProps.width = newWidth
+          }
+          if ('height' in newProps) {
+            newProps.height = newHeight
+          }
+
+          return {
+            ...el,
+            props: newProps,
+            position: { x: newX, y: newY },
+          }
+        }
+        return el
+      })
+
+      setCanvasElements(updatedElements)
+    },
+    [resizing, scale, setCanvasElements],
+  )
+
+  // 结束尺寸调整
+  const handleResizeEnd = useCallback(() => {
+    setResizing(null)
+  }, [])
+
+  // 添加鼠标移动和松开事件监听（当正在调整大小时）
+  useEffect(() => {
+    if (resizing) {
+      const handleGlobalMouseMove = (e: MouseEvent) => {
+        handleResizeMove(e)
+      }
+      const handleGlobalMouseUp = () => {
+        handleResizeEnd()
+      }
+
+      document.addEventListener('mousemove', handleGlobalMouseMove)
+      document.addEventListener('mouseup', handleGlobalMouseUp)
+
+      return () => {
+        document.removeEventListener('mousemove', handleGlobalMouseMove)
+        document.removeEventListener('mouseup', handleGlobalMouseUp)
+      }
+    }
+  }, [resizing, handleResizeMove, handleResizeEnd])
+
   const renderElement = (element: CanvasElement) => {
     const componentMeta = getComponentById(element.type)
     if (!componentMeta) return null
@@ -425,10 +664,35 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
         ? element.position.y + multiDragOffset.y
         : element.position.y
 
+    // 计算元素尺寸
+    let width =
+      element.props.width ||
+      (element.props.style && element.props.style.width) ||
+      200
+    let height =
+      element.props.height ||
+      (element.props.style && element.props.style.height) ||
+      50
+
+    if (typeof width === 'string' && width.endsWith('px')) {
+      width = Number.parseInt(width, 10)
+    } else if (width === 'auto') {
+      width = 200
+    }
+
+    if (typeof height === 'string' && height.endsWith('px')) {
+      height = Number.parseInt(height, 10)
+    } else if (height === 'auto') {
+      height = 50
+    }
+
+    const elementWidth = Number(width)
+    const elementHeight = Number(height)
+
     return (
       <m.div
         key={element.id}
-        drag={toolMode === 'select'}
+        drag={toolMode === 'select' && !isResizing}
         dragMomentum={false}
         onDragEnd={(_event, info) =>
           handleElementDragEnd(element.id, element, _event, info)
@@ -452,6 +716,101 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
         className="outline-none"
       >
         <Component {...element.props} />
+        {/* 拖拽调整控制点 - 仅选中时显示 */}
+        {isSelected && toolMode === 'select' && (
+          <>
+            {/* 四个角控制点 */}
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                top: -6,
+                left: -6,
+                cursor: `${getCursorForHandle('top-left')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'top-left', e, element)
+              }
+            />
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                top: -6,
+                right: -6,
+                cursor: `${getCursorForHandle('top-right')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'top-right', e, element)
+              }
+            />
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                bottom: -6,
+                left: -6,
+                cursor: `${getCursorForHandle('bottom-left')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'bottom-left', e, element)
+              }
+            />
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                bottom: -6,
+                right: -6,
+                cursor: `${getCursorForHandle('bottom-right')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'bottom-right', e, element)
+              }
+            />
+            {/* 四个边中点控制点 */}
+            <div
+              className="absolute h-3 w-3 bg-blue-500 border border-white"
+              style={{
+                top: -6,
+                left: elementWidth / 2 - 4,
+                cursor: `${getCursorForHandle('top')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'top', e, element)
+              }
+            />
+            <div
+              className="absolute h-3 w-3 bg-blue-500 border border-white"
+              style={{
+                bottom: -6,
+                left: elementWidth / 2 - 4,
+                cursor: `${getCursorForHandle('bottom')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'bottom', e, element)
+              }
+            />
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                left: -6,
+                top: elementHeight / 2 - 4,
+                cursor: `${getCursorForHandle('left')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'left', e, element)
+              }
+            />
+            <div
+              className="absolute w-3 h-3 bg-blue-500 border border-white"
+              style={{
+                right: -6,
+                top: elementHeight / 2 - 4,
+                cursor: `${getCursorForHandle('right')}`,
+              }}
+              onMouseDown={(e) =>
+                handleResizeStart(element.id, 'right', e, element)
+              }
+            />
+          </>
+        )}
       </m.div>
     )
   }
