@@ -46,6 +46,7 @@ import { BsUpload } from '~/modules/editor/base/components/BsUpload'
 
 import { Button } from './components/Button'
 import { Frame } from './components/Frame'
+import { Group } from './components/Group'
 import { Heading } from './components/Heading'
 import { Input } from './components/Input'
 import { Text } from './components/Text'
@@ -70,6 +71,27 @@ export type ComponentMeta = {
 }
 
 export const componentRegistry: ComponentMeta[] = [
+  {
+    id: 'group',
+    name: '编组',
+    category: '基础',
+    defaultProps: {
+      label: '组',
+      width: 200,
+      height: 200,
+      style: {
+        backgroundColor: 'transparent',
+        border: '2px dashed #3b82f6',
+        borderColor: '#3b82f6',
+        borderWidth: 2,
+        borderStyle: 'dashed',
+        borderRadius: 4,
+        width: 200,
+        height: 200,
+      },
+    },
+    component: Group,
+  },
   {
     id: 'heading',
     name: '标题',

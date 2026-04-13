@@ -8,9 +8,12 @@ import type { CanvasElement } from '~/atoms/editor'
 import {
   addCanvasElement,
   addCanvasOffset,
+  changeSelectedElementsZIndex,
   clearDragPreview,
   getCanvasElements,
   getCanvasOffset,
+  groupSelectedElements,
+  ungroupElements,
   updateElementPosition,
   useCanvasElementsValue,
   useCanvasOffsetValue,
@@ -102,7 +105,51 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     startTop: number
   } | null>(null)
 
+  // 右键上下文菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    selectedIds: string[]
+  } | null>(null)
+
   const isResizing = !!resizing
+
+  // 关闭右键菜单
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  // 处理右键点击
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      if (selectedIds.length === 0) {
+        setContextMenu(null)
+        return
+      }
+
+      // 在鼠标位置显示上下文菜单
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        selectedIds: [...selectedIds],
+      })
+    },
+    [selectedIds],
+  )
+
+  // 点击画布其他地方关闭菜单
+  useEffect(() => {
+    const handleClick = () => {
+      closeContextMenu()
+    }
+    document.addEventListener('click', handleClick)
+    return () => {
+      document.removeEventListener('click', handleClick)
+    }
+  }, [closeContextMenu])
 
   // 处理画布整体平移 - 长按背景拖拽
   const handleCanvasPan = (_: unknown, info: PanInfo) => {
@@ -264,7 +311,13 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     const boxSelectedIds: string[] = []
     // 使用 getCanvasElements 获取最新元素数组，而不是依赖闭包捕获的旧值
     const currentElements = getCanvasElements()
-    currentElements.forEach((el) => {
+
+    // 递归检查所有元素，如果父元素是组并且被选中，不应该选中子元素
+    const checkElementIntersect = (
+      el: CanvasElement,
+      parentX = 0,
+      parentY = 0,
+    ) => {
       // For simplicity, use element position and assume some default size
       // TODO: Get actual bounding box from rendered elements
       // Get width/height from either top-level props or style
@@ -286,21 +339,39 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
         elHeight = 50
       }
 
-      const elRight = el.position.x + Number(elWidth)
-      const elBottom = el.position.y + Number(elHeight)
+      const absoluteX = parentX + el.position.x
+      const absoluteY = parentY + el.position.y
+      const elRight = absoluteX + Number(elWidth)
+      const elBottom = absoluteY + Number(elHeight)
 
       // Check intersection
       const intersects = !(
-        rightCanvas < el.position.x ||
+        rightCanvas < absoluteX ||
         leftCanvas > elRight ||
-        bottomCanvas < el.position.y ||
+        bottomCanvas < absoluteY ||
         topCanvas > elBottom
       )
 
       if (intersects) {
         boxSelectedIds.push(el.id)
       }
-    })
+
+      // 如果当前元素是组并且与选择框相交，不递归检查子元素
+      // 组作为整体被选中，不应该同时选中子元素
+      if (!(el.type === 'group' && intersects)) {
+        // 递归检查子元素
+        currentElements
+          .filter((child) => child.parentId === el.id)
+          .forEach((child) =>
+            checkElementIntersect(child, absoluteX, absoluteY),
+          )
+      }
+    }
+
+    // 只检查顶级元素，子元素会被递归检查
+    currentElements
+      .filter((el) => !el.parentId)
+      .forEach((el) => checkElementIntersect(el))
 
     // Select all elements in the box
     setSelectedIds(boxSelectedIds)
@@ -647,7 +718,8 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     }
   }, [resizing, handleResizeMove, handleResizeEnd])
 
-  const renderElement = (element: CanvasElement) => {
+  // 递归渲染元素，如果元素是组则渲染子元素相对位置
+  const renderElement = (element: CanvasElement, parentX = 0, parentY = 0) => {
     const componentMeta = getComponentById(element.type)
     if (!componentMeta) return null
 
@@ -656,13 +728,17 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
 
     // 批量拖拽时，给选中元素添加实时偏移
     const currentX =
-      selectedIds.includes(element.id) && multiDragOffset.x !== 0
-        ? element.position.x + multiDragOffset.x
-        : element.position.x
+      parentX +
+      element.position.x +
+      (selectedIds.includes(element.id) && multiDragOffset.x !== 0
+        ? multiDragOffset.x
+        : 0)
     const currentY =
-      selectedIds.includes(element.id) && multiDragOffset.y !== 0
-        ? element.position.y + multiDragOffset.y
-        : element.position.y
+      parentY +
+      element.position.y +
+      (selectedIds.includes(element.id) && multiDragOffset.y !== 0
+        ? multiDragOffset.y
+        : 0)
 
     // 计算元素尺寸
     let width =
@@ -689,19 +765,58 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     const elementWidth = Number(width)
     const elementHeight = Number(height)
 
+    // 如果是组，查找并渲染子元素
+    const childElements = elements.filter((el) => el.parentId === element.id)
+
+    // 对于组内的子元素，点击事件应该冒泡到组，由组处理选中
+    // 编组后作为一个整体，只选中组本身，不选中子元素
+    const handleClick = (e: React.MouseEvent) => {
+      e.stopPropagation()
+
+      // 如果当前元素有父组，选中父组而不是当前元素
+      if (element.parentId) {
+        // 查找最顶层的祖先组
+        let current = element
+        let topMost: CanvasElement = element
+        while (current.parentId) {
+          const parent = elements.find((el) => el.id === current.parentId)
+          if (parent) {
+            current = parent
+            topMost = parent
+          } else {
+            break
+          }
+        }
+        // 选中最顶层的祖先组
+        setSelectedIds([topMost.id])
+      } else {
+        // 没有父组，正常选中当前元素
+        setSelectedIds([element.id])
+      }
+    }
+
+    // 对于组内的子元素，右键事件也应该冒泡到组
+    const handleContextMenuLocal = (e: React.MouseEvent) => {
+      if (element.parentId) {
+        // 让事件冒泡，不阻止，这样父组会处理
+        // 不调用preventDefault，让事件冒泡
+        return
+      }
+
+      e.preventDefault()
+      e.stopPropagation()
+      handleContextMenu(e)
+    }
+
     return (
       <m.div
         key={element.id}
-        drag={toolMode === 'select' && !isResizing}
+        drag={toolMode === 'select' && !isResizing && !element.parentId}
         dragMomentum={false}
         onDragEnd={(_event, info) =>
           handleElementDragEnd(element.id, element, _event, info)
         }
-        onClick={(e) => {
-          e.stopPropagation()
-          // Clicking an element selects only that one
-          setSelectedIds([element.id])
-        }}
+        onClick={handleClick}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={Spring.presets.smooth}
@@ -714,10 +829,15 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           pointerEvents: toolMode === 'pan' ? 'none' : 'auto',
         }}
         className="outline-none"
+        onContextMenu={handleContextMenuLocal}
       >
         <Component {...element.props} />
-        {/* 拖拽调整控制点 - 仅选中时显示 */}
-        {isSelected && toolMode === 'select' && (
+        {/* 渲染子元素相对组定位 */}
+        {childElements.map((child) =>
+          renderElement(child, element.position.x, element.position.y),
+        )}
+        {/* 拖拽调整控制点 - 仅选中时显示，只有顶级元素才有控制点 */}
+        {isSelected && toolMode === 'select' && !element.parentId && (
           <>
             {/* 四个角控制点 */}
             <div
@@ -948,8 +1068,10 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
           }}
         />
 
-        {/* 所有画布元素直接渲染在无限画布上 */}
-        {elements.map((element) => renderElement(element))}
+        {/* 所有画布元素直接渲染在无限画布上 - 只渲染顶级元素，子元素会被组递归渲染 */}
+        {elements
+          .filter((el) => !el.parentId)
+          .map((element) => renderElement(element))}
 
         {/* 拖拽预览 - 虚线边框 */}
         {dragPreview && (
@@ -980,6 +1102,7 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
               // 阻止事件冒泡，不触发画布的框选
               e.stopPropagation()
             }}
+            onContextMenu={handleContextMenu}
             className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-auto cursor-move z-40"
             style={{
               left: multiSelectionBox.left + multiDragOffset.x,
@@ -1003,6 +1126,88 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
             height: boxStyle.height,
           }}
         />
+      )}
+
+      {/* 右键上下文菜单 */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white shadow-lg rounded-md border border-gray-200 py-1 min-w-[180px] z-[1000]"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+        >
+          {/* 层级操作 */}
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              changeSelectedElementsZIndex('up')
+              closeContextMenu()
+            }}
+          >
+            上移一层
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              changeSelectedElementsZIndex('down')
+              closeContextMenu()
+            }}
+          >
+            下移一层
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              changeSelectedElementsZIndex('top')
+              closeContextMenu()
+            }}
+          >
+            移到顶层
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              changeSelectedElementsZIndex('bottom')
+              closeContextMenu()
+            }}
+          >
+            移到底层
+          </button>
+          <div className="my-1 border-t border-gray-200" />
+          {/* 编组操作 - 只在多选时可用 */}
+          {contextMenu.selectedIds.length > 1 && (
+            <button
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+              onClick={() => {
+                groupSelectedElements()
+                closeContextMenu()
+              }}
+            >
+              编组
+            </button>
+          )}
+          {/* 解组操作 - 检查选中是否是组 */}
+          {contextMenu.selectedIds.length === 1 &&
+            (() => {
+              const selectedId = contextMenu.selectedIds[0]
+              const selectedEl = elements.find((el) => el.id === selectedId)
+              if (selectedEl && selectedEl.type === 'group') {
+                return (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
+                    onClick={() => {
+                      ungroupElements(selectedId)
+                      closeContextMenu()
+                    }}
+                  >
+                    取消编组
+                  </button>
+                )
+              }
+              return null
+            })()}
+        </div>
       )}
     </div>
   )
