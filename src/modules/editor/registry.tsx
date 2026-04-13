@@ -1,48 +1,48 @@
-import { TnActionSheet } from '~/modules/editor/tuniao/components/TnActionSheet'
-import { TnAvatar } from '~/modules/editor/tuniao/components/TnAvatar'
-import { TnBadge } from '~/modules/editor/tuniao/components/TnBadge'
-import { TnButton } from '~/modules/editor/tuniao/components/TnButton'
-import { TnCalendar } from '~/modules/editor/tuniao/components/TnCalendar'
-import { TnCard } from '~/modules/editor/tuniao/components/TnCard'
-import { TnCheckbox } from '~/modules/editor/tuniao/components/TnCheckbox'
-import { TnCircleProgress } from '~/modules/editor/tuniao/components/TnCircleProgress'
-import { TnCode } from '~/modules/editor/tuniao/components/TnCode'
-import { TnCollapse } from '~/modules/editor/tuniao/components/TnCollapse'
-import { TnCountdown } from '~/modules/editor/tuniao/components/TnCountdown'
-import { TnDatePicker } from '~/modules/editor/tuniao/components/TnDatePicker'
-import { TnDivider } from '~/modules/editor/tuniao/components/TnDivider'
-import { TnDrawer } from '~/modules/editor/tuniao/components/TnDrawer'
-import { TnEmpty } from '~/modules/editor/tuniao/components/TnEmpty'
-import { TnForm } from '~/modules/editor/tuniao/components/TnForm'
-import { TnGridList } from '~/modules/editor/tuniao/components/TnGridList'
-import { TnIcon } from '~/modules/editor/tuniao/components/TnIcon'
-import { TnInput } from '~/modules/editor/tuniao/components/TnInput'
-import { TnList } from '~/modules/editor/tuniao/components/TnList'
-import { TnLoading } from '~/modules/editor/tuniao/components/TnLoading'
-import { TnModal } from '~/modules/editor/tuniao/components/TnModal'
-// Import all 图鸟 components (named exports)
-import { TnNavbar } from '~/modules/editor/tuniao/components/TnNavbar'
-import { TnNoticeBar } from '~/modules/editor/tuniao/components/TnNoticeBar'
-import { TnPagination } from '~/modules/editor/tuniao/components/TnPagination'
-import { TnPopup } from '~/modules/editor/tuniao/components/TnPopup'
-import { TnProgress } from '~/modules/editor/tuniao/components/TnProgress'
-import { TnRadio } from '~/modules/editor/tuniao/components/TnRadio'
-import { TnRate } from '~/modules/editor/tuniao/components/TnRate'
-import { TnResult } from '~/modules/editor/tuniao/components/TnResult'
-import { TnSearch } from '~/modules/editor/tuniao/components/TnSearch'
-import { TnSelect } from '~/modules/editor/tuniao/components/TnSelect'
-import { TnSkeleton } from '~/modules/editor/tuniao/components/TnSkeleton'
-import { TnSlider } from '~/modules/editor/tuniao/components/TnSlider'
-import { TnSteps } from '~/modules/editor/tuniao/components/TnSteps'
-import { TnSticky } from '~/modules/editor/tuniao/components/TnSticky'
-import { TnSwiper } from '~/modules/editor/tuniao/components/TnSwiper'
-import { TnSwitch } from '~/modules/editor/tuniao/components/TnSwitch'
-import { TnTabbar } from '~/modules/editor/tuniao/components/TnTabbar'
-import { TnTag } from '~/modules/editor/tuniao/components/TnTag'
-import { TnTextarea } from '~/modules/editor/tuniao/components/TnTextarea'
-import { TnToast } from '~/modules/editor/tuniao/components/TnToast'
-import { TnUpload } from '~/modules/editor/tuniao/components/TnUpload'
-import { tuniaoComponents } from '~/modules/editor/tuniao/tuniao-data'
+import { baseComponents } from '~/modules/editor/base/base-data'
+import { BsActionSheet } from '~/modules/editor/base/components/BsActionSheet'
+import { BsAvatar } from '~/modules/editor/base/components/BsAvatar'
+import { BsBadge } from '~/modules/editor/base/components/BsBadge'
+import { BsButton } from '~/modules/editor/base/components/BsButton'
+import { BsCalendar } from '~/modules/editor/base/components/BsCalendar'
+import { BsCard } from '~/modules/editor/base/components/BsCard'
+import { BsCheckbox } from '~/modules/editor/base/components/BsCheckbox'
+import { BsCircleProgress } from '~/modules/editor/base/components/BsCircleProgress'
+import { BsCode } from '~/modules/editor/base/components/BsCode'
+import { BsCollapse } from '~/modules/editor/base/components/BsCollapse'
+import { BsCountdown } from '~/modules/editor/base/components/BsCountdown'
+import { BsDatePicker } from '~/modules/editor/base/components/BsDatePicker'
+import { BsDivider } from '~/modules/editor/base/components/BsDivider'
+import { BsDrawer } from '~/modules/editor/base/components/BsDrawer'
+import { BsEmpty } from '~/modules/editor/base/components/BsEmpty'
+import { BsForm } from '~/modules/editor/base/components/BsForm'
+import { BsGridList } from '~/modules/editor/base/components/BsGridList'
+import { BsIcon } from '~/modules/editor/base/components/BsIcon'
+import { BsInput } from '~/modules/editor/base/components/BsInput'
+import { BsList } from '~/modules/editor/base/components/BsList'
+import { BsLoading } from '~/modules/editor/base/components/BsLoading'
+import { BsModal } from '~/modules/editor/base/components/BsModal'
+// Import all base components (named exports)
+import { BsNavbar } from '~/modules/editor/base/components/BsNavbar'
+import { BsNoticeBar } from '~/modules/editor/base/components/BsNoticeBar'
+import { BsPagination } from '~/modules/editor/base/components/BsPagination'
+import { BsPopup } from '~/modules/editor/base/components/BsPopup'
+import { BsProgress } from '~/modules/editor/base/components/BsProgress'
+import { BsRadio } from '~/modules/editor/base/components/BsRadio'
+import { BsRate } from '~/modules/editor/base/components/BsRate'
+import { BsResult } from '~/modules/editor/base/components/BsResult'
+import { BsSearch } from '~/modules/editor/base/components/BsSearch'
+import { BsSelect } from '~/modules/editor/base/components/BsSelect'
+import { BsSkeleton } from '~/modules/editor/base/components/BsSkeleton'
+import { BsSlider } from '~/modules/editor/base/components/BsSlider'
+import { BsSteps } from '~/modules/editor/base/components/BsSteps'
+import { BsSticky } from '~/modules/editor/base/components/BsSticky'
+import { BsSwiper } from '~/modules/editor/base/components/BsSwiper'
+import { BsSwitch } from '~/modules/editor/base/components/BsSwitch'
+import { BsTabbar } from '~/modules/editor/base/components/BsTabbar'
+import { BsTag } from '~/modules/editor/base/components/BsTag'
+import { BsTextarea } from '~/modules/editor/base/components/BsTextarea'
+import { BsToast } from '~/modules/editor/base/components/BsToast'
+import { BsUpload } from '~/modules/editor/base/components/BsUpload'
 
 import { Button } from './components/Button'
 import { Frame } from './components/Frame'
@@ -213,52 +213,52 @@ export const componentRegistry: ComponentMeta[] = [
   },
 ]
 
-// 图鸟组件映射表
-const tuniaoComponentMap: Record<string, React.ComponentType<any>> = {
-  navbar: TnNavbar,
-  tabbar: TnTabbar,
-  'search-box': TnSearch,
-  swiper: TnSwiper,
-  gridList: TnGridList,
-  card: TnCard,
-  textarea: TnTextarea,
-  form: TnForm,
-  checkbox: TnCheckbox,
-  radio: TnRadio,
-  select: TnSelect,
-  'image-upload': TnUpload,
-  rate: TnRate,
-  slider: TnSlider,
-  switch: TnSwitch,
-  code: TnCode,
-  divider: TnDivider,
-  tag: TnTag,
-  'line-progress': TnProgress,
-  avatar: TnAvatar,
-  list: TnList,
-  'count-down': TnCountdown,
-  skeleton: TnSkeleton,
-  badge: TnBadge,
-  calendar: TnCalendar,
-  modal: TnModal,
-  actionSheet: TnActionSheet,
-  input: TnInput,
-  button: TnButton,
-  collapse: TnCollapse,
-  popup: TnPopup,
-  steps: TnSteps,
-  sticky: TnSticky,
-  empty: TnEmpty,
-  'notice-bar': TnNoticeBar,
-  loading: TnLoading,
-  circleProgress: TnCircleProgress,
-  pagination: TnPagination,
-  drawer: TnDrawer,
-  datePicker: TnDatePicker,
-  icon: TnIcon,
-  result: TnResult,
-  toast: TnToast,
-  loadmore: TnLoading,
+// 基础组件映射表
+const baseComponentMap: Record<string, React.ComponentType<any>> = {
+  navbar: BsNavbar,
+  tabbar: BsTabbar,
+  'search-box': BsSearch,
+  swiper: BsSwiper,
+  gridList: BsGridList,
+  card: BsCard,
+  textarea: BsTextarea,
+  form: BsForm,
+  checkbox: BsCheckbox,
+  radio: BsRadio,
+  select: BsSelect,
+  'image-upload': BsUpload,
+  rate: BsRate,
+  slider: BsSlider,
+  switch: BsSwitch,
+  code: BsCode,
+  divider: BsDivider,
+  tag: BsTag,
+  'line-progress': BsProgress,
+  avatar: BsAvatar,
+  list: BsList,
+  'count-down': BsCountdown,
+  skeleton: BsSkeleton,
+  badge: BsBadge,
+  calendar: BsCalendar,
+  modal: BsModal,
+  actionSheet: BsActionSheet,
+  input: BsInput,
+  button: BsButton,
+  collapse: BsCollapse,
+  popup: BsPopup,
+  steps: BsSteps,
+  sticky: BsSticky,
+  empty: BsEmpty,
+  'notice-bar': BsNoticeBar,
+  loading: BsLoading,
+  circleProgress: BsCircleProgress,
+  pagination: BsPagination,
+  drawer: BsDrawer,
+  datePicker: BsDatePicker,
+  icon: BsIcon,
+  result: BsResult,
+  toast: BsToast,
+  loadmore: BsLoading,
 }
 
 // 合并图鸟组件到注册表
@@ -275,7 +275,7 @@ const categoryMap: Record<string, ComponentCategory> = {
   other: '其他',
 }
 
-const tuniaoRegistry: ComponentMeta[] = tuniaoComponents.map((meta) => {
+const baseRegistry: ComponentMeta[] = baseComponents.map((meta) => {
   // 从 props 提取 defaultProps
   const defaultProps: Record<string, any> = {}
   meta.props.forEach((prop) => {
@@ -288,16 +288,16 @@ const tuniaoRegistry: ComponentMeta[] = tuniaoComponents.map((meta) => {
   const category = categoryMap[meta.category] || '其他'
 
   return {
-    id: `tn-${meta.id}`,
+    id: `bs-${meta.id}`,
     name: meta.title,
     category,
     defaultProps,
-    component: tuniaoComponentMap[meta.id] || FallbackComponent,
+    component: baseComponentMap[meta.id] || FallbackComponent,
   }
 })
 
 // 合并后完整的组件注册表
-export const fullComponentRegistry = [...componentRegistry, ...tuniaoRegistry]
+export const fullComponentRegistry = [...componentRegistry, ...baseRegistry]
 
 export const getComponentById = (id: string): ComponentMeta | undefined => {
   return fullComponentRegistry.find((c) => c.id === id)
