@@ -64,94 +64,103 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
     const entries = Object.entries(selected.props)
     if (entries.length === 0) return null
 
+    // 默认展开 style 属性
+    const defaultOpen = ['style']
+
     return (
       <div className="space-y-4">
-        {entries.map(([key, value]) => {
-          if (typeof value === 'object' && value !== null) {
-            return (
-              <AccordionItem key={key} value={key}>
-                <AccordionTrigger className="capitalize">
-                  {key}
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-3 pt-2">
-                    {Object.entries(value).map(([subKey, subValue]) => (
-                      <div key={subKey}>
-                        <label className="block text-sm font-medium text-text-secondary mb-1 capitalize">
-                          {subKey}
-                        </label>
-                        {typeof subValue === 'string' &&
-                        subValue.startsWith('#') ? (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="color"
-                              value={subValue}
-                              onChange={(e) =>
-                                handlePropChange(
-                                  `${key}.${subKey}`,
-                                  e.target.value,
-                                )
-                              }
-                              className="w-10 h-8 rounded overflow-hidden cursor-pointer border border-border"
-                            />
+        <Accordion
+          type="multiple"
+          defaultValue={defaultOpen}
+          className="w-full"
+        >
+          {entries.map(([key, value]) => {
+            if (typeof value === 'object' && value !== null) {
+              return (
+                <AccordionItem key={key} value={key}>
+                  <AccordionTrigger className="capitalize">
+                    {key}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3 pt-2">
+                      {Object.entries(value).map(([subKey, subValue]) => (
+                        <div key={subKey}>
+                          <label className="block text-sm font-medium text-text-secondary mb-1 capitalize">
+                            {subKey}
+                          </label>
+                          {typeof subValue === 'string' &&
+                          subValue.startsWith('#') ? (
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="color"
+                                value={subValue}
+                                onChange={(e) =>
+                                  handlePropChange(
+                                    `${key}.${subKey}`,
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-10 h-8 rounded overflow-hidden cursor-pointer border border-border"
+                              />
+                              <Input
+                                value={subValue}
+                                onChange={(e) =>
+                                  handlePropChange(
+                                    `${key}.${subKey}`,
+                                    e.target.value,
+                                  )
+                                }
+                                className="flex-1"
+                              />
+                            </div>
+                          ) : (
                             <Input
-                              value={subValue}
+                              value={String(subValue)}
                               onChange={(e) =>
                                 handlePropChange(
                                   `${key}.${subKey}`,
                                   e.target.value,
                                 )
                               }
-                              className="flex-1"
                             />
-                          </div>
-                        ) : (
-                          <Input
-                            value={String(subValue)}
-                            onChange={(e) =>
-                              handlePropChange(
-                                `${key}.${subKey}`,
-                                e.target.value,
-                              )
-                            }
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )
-          }
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )
+            }
 
-          return (
-            <div key={key}>
-              <label className="block text-sm font-medium text-text-secondary mb-1 capitalize">
-                {key}
-              </label>
-              {typeof value === 'string' && value.startsWith('#') ? (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="color"
-                    value={value}
-                    onChange={(e) => handlePropChange(key, e.target.value)}
-                    className="w-10 h-8 rounded overflow-hidden cursor-pointer border border-border"
-                  />
+            return (
+              <div key={key}>
+                <label className="block text-sm font-medium text-text-secondary mb-1 capitalize">
+                  {key}
+                </label>
+                {typeof value === 'string' && value.startsWith('#') ? (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={value}
+                      onChange={(e) => handlePropChange(key, e.target.value)}
+                      className="w-10 h-8 rounded overflow-hidden cursor-pointer border border-border"
+                    />
+                    <Input
+                      value={value}
+                      onChange={(e) => handlePropChange(key, e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
+                ) : (
                   <Input
-                    value={value}
+                    value={String(value)}
                     onChange={(e) => handlePropChange(key, e.target.value)}
-                    className="flex-1"
                   />
-                </div>
-              ) : (
-                <Input
-                  value={String(value)}
-                  onChange={(e) => handlePropChange(key, e.target.value)}
-                />
-              )}
-            </div>
-          )
-        })}
+                )}
+              </div>
+            )
+          })}
+        </Accordion>
       </div>
     )
   }
@@ -191,7 +200,7 @@ export const PropsPanel: React.FC<PropsPanelProps> = ({ className }) => {
         </p>
       </div>
 
-      <Accordion type="single" collapsible className="w-full">
+      <Accordion type="multiple" defaultValue={['general']} className="w-full">
         <AccordionItem value="general">
           <AccordionTrigger>基础属性</AccordionTrigger>
           <AccordionContent>{renderProps()}</AccordionContent>

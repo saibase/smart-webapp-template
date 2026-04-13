@@ -205,10 +205,27 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     elements.forEach((el) => {
       // For simplicity, use element position and assume some default size
       // TODO: Get actual bounding box from rendered elements
-      const elWidth = el.props.width || 200
-      const elHeight = el.props.height || 50
-      const elRight = el.position.x + elWidth
-      const elBottom = el.position.y + elHeight
+      // Get width/height from either top-level props or style
+      let elWidth =
+        el.props.width || (el.props.style && el.props.style.width) || 200
+      let elHeight =
+        el.props.height || (el.props.style && el.props.style.height) || 50
+
+      // Convert to number if it's a string with px
+      if (typeof elWidth === 'string' && elWidth.endsWith('px')) {
+        elWidth = Number.parseInt(elWidth, 10)
+      } else if (elWidth === 'auto') {
+        elWidth = 200
+      }
+
+      if (typeof elHeight === 'string' && elHeight.endsWith('px')) {
+        elHeight = Number.parseInt(elHeight, 10)
+      } else if (elHeight === 'auto') {
+        elHeight = 50
+      }
+
+      const elRight = el.position.x + Number(elWidth)
+      const elBottom = el.position.y + Number(elHeight)
 
       // Check intersection
       const intersects = !(
@@ -406,12 +423,29 @@ export const Canvas: React.FC<CanvasProps> = ({ className }) => {
     let maxY = -Infinity
 
     selectedElements.forEach((el) => {
-      const width = el.props.width || 200
-      const height = el.props.height || 50
+      // Get width/height from either top-level props or style
+      let width =
+        el.props.width || (el.props.style && el.props.style.width) || 200
+      let height =
+        el.props.height || (el.props.style && el.props.style.height) || 50
+
+      // Convert to number if it's a string with px
+      if (typeof width === 'string' && width.endsWith('px')) {
+        width = Number.parseInt(width, 10)
+      } else if (width === 'auto') {
+        width = 200
+      }
+
+      if (typeof height === 'string' && height.endsWith('px')) {
+        height = Number.parseInt(height, 10)
+      } else if (height === 'auto') {
+        height = 50
+      }
+
       minX = Math.min(minX, el.position.x)
       minY = Math.min(minY, el.position.y)
-      maxX = Math.max(maxX, el.position.x + width)
-      maxY = Math.max(maxY, el.position.y + height)
+      maxX = Math.max(maxX, el.position.x + Number(width))
+      maxY = Math.max(maxY, el.position.y + Number(height))
     })
 
     // 添加padding让包围框更舒适

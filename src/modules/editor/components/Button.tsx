@@ -7,9 +7,15 @@ type ButtonProps = {
   style?: {
     backgroundColor?: string
     color?: string
-    padding?: string
-    borderRadius?: string
     fontSize?: string
+    padding?: string
+    margin?: string
+    borderRadius?: string
+    borderColor?: string
+    borderWidth?: string
+    borderStyle?: string
+    width?: string | number
+    height?: string | number
   }
   className?: string
   onClick?: () => void
